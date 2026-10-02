@@ -131,3 +131,15 @@ test("an instruction to Lara materialises a solution view beside the conversatio
   const dl=page.waitForEvent("download");await view.getByRole("button",{name:"Télécharger la fiche"}).click();expect((await dl).suggestedFilename()).toContain("solution");
   await view.getByRole("button",{name:/Mission Control/}).click();await expect(page).toHaveURL(/mission$/);
 });
+
+test("the orchestrator renders a branded film and an analytics chart",async({page})=>{
+  const film={type:"render_video",title:"Convoi minier",prompt:"drone shot along a convoy"};
+  const chart={type:"chart",chart:{title:"Croissance du PIB",kind:"bar",labels:["2022","2023","2024"],values:[6.2,6.5,6],unit:"%",source:"Banque mondiale"}};
+  await page.route("**/api/gemini/stream",r=>r.fulfill({contentType:"text/event-stream",body:`data: ${JSON.stringify({action:film})}\n\ndata: ${JSON.stringify({action:chart})}\n\ndata: ${JSON.stringify({done:true,reply:"Voici le film et l’analyse.",provider:"gemini",model:"t",actions:[film,chart]})}\n\n`}));
+  await page.route("**/api/studio/video**",r=>r.request().method()==="POST"?r.fulfill({contentType:"application/json",body:'{"ok":true,"job":"abc"}'}):r.fulfill({contentType:"application/json",body:'{"ok":true,"status":"done","url":"/video/agl-hero.mp4"}'}));
+  await page.route("**/api/tts",r=>r.fulfill({status:503,body:"{}"}));
+  await page.goto("/accueil");await page.getByRole("button",{name:"Ouvrir Lara"}).click();await page.getByLabel("Question à Lara").fill("Film et chiffres");await page.getByRole("button",{name:"Envoyer la question"}).click();
+  const view=page.getByRole("dialog",{name:"Croissance du PIB"});await expect(view).toBeVisible();await expect(view.getByText("Source : Banque mondiale")).toBeVisible();
+  await view.getByRole("button",{name:"Convoi minier"}).click();
+  await expect(page.locator(".brand-film video")).toBeVisible({timeout:15000});await expect(page.locator(".brand-film").getByRole("img",{name:"Africa Global Logistics"})).toBeVisible();
+});

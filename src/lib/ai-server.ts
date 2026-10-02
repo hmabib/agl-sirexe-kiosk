@@ -44,40 +44,75 @@ export async function getReply(opts:ReplyOptions,onToken?:(text:string)=>void,on
 }
 export async function getModelInfo(){const {provider}=resolveKey();return {provider,configured:provider!=="none",textModel:GEMINI_TEXT_DEFAULT,liveModel:GEMINI_LIVE_MODEL,ttsModel:GEMINI_TTS_MODEL,imageModel:GEMINI_IMAGE_MODEL,knowledge:(await getKnowledge()).length};}
 export interface ImageResult {ok:boolean;image?:string;text?:string;model?:string;message?:string}
-// Charte Africa Global Logistics appliquée à chaque visuel ; le logo officiel est composé ensuite
-// sur la borne (un modèle d’image ne reproduit pas fidèlement un logo).
-const AGL_IMAGE_STYLE="Art direction: premium corporate visual for Africa Global Logistics. Colour palette dominated by deep navy blue (#1B365F) with refined soft gold accents (#EED58E), natural daylight or golden hour, clean modern composition, realistic African logistics context. No text, no letters, no logos, no watermark. Keep the bottom band and bottom-right corner calm and uncluttered.";
+// Charte Africa Global Logistics appliquée à chaque visuel (formulée en étalonnage photo pour
+// éviter cadres et textes) ; le logo officiel est composé ensuite sur la borne.
+const AGL_IMAGE_STYLE="Full-bleed edge-to-edge cinematic photograph. Colour grading: deep navy-blue shadows and sky tones (#1B365F) with warm soft-gold highlights (#EED58E), premium corporate mood, realistic West African logistics context. No border, no frame, no text, no letters, no logo, no watermark. Calm, uncluttered lower third.";
 const IMAGE_DEADLINE_MS=55000;
-// Modèles d’image réellement ouverts à la clé, découverts une fois par instance :
-// la génération bascule seule si le modèle configuré est retiré ou non autorisé.
+const OPENAI_IMAGE_MODEL=process.env.OPENAI_IMAGE_MODEL||"gpt-image-2.5-flare";
+const FAL_IMAGE_MODEL=process.env.FAL_IMAGE_MODEL||"fal-ai/flux-2/flash";
+
+// Modèles d’image Gemini réellement ouverts à la clé, découverts une fois par instance.
 let discoveredImageModels:Promise<string[]>|null=null;
 function discoverImageModels(ai:GoogleGenAI){
   discoveredImageModels??=(async()=>{
     const found:string[]=[];
     try{const pager=await ai.models.list({config:{pageSize:200}});for await(const m of pager){const name=(m.name??"").replace(/^models\//,"");if(/image/.test(name)&&!/imagen|tts|live/.test(name)&&(m.supportedActions??["generateContent"]).includes("generateContent"))found.push(name);}}
     catch(e){console.warn("Lara image models unavailable",e instanceof Error?e.message.slice(0,160):"unknown");}
-    // Les plus récents d’abord (versions plus élevées), les « preview » après les stables.
     return found.sort((a,b)=>Number(a.includes("preview"))-Number(b.includes("preview"))||b.localeCompare(a,undefined,{numeric:true}));
   })();
   return discoveredImageModels;
 }
-let workingImageModel:string|null=null;
+
+// Orchestration : fournisseurs essayés dans l’ordre ; un fournisseur à court de quota ou de crédit
+// est mis de côté 10 minutes pour ne pas faire attendre le visiteur.
+const cooldown=new Map<string,number>();
+const COOLDOWN_MS=10*60*1000;
+class QuotaError extends Error{}
+const isQuota=(status:number,msg:string)=>status===429||status===402||/quota|credit|billing|insufficient/i.test(msg);
+type Provider={id:string;run:(prompt:string,timeout:number)=>Promise<string>};
+async function toDataUrl(url:string,timeout:number){const r=await fetch(url,{signal:AbortSignal.timeout(timeout)});if(!r.ok)throw new Error(`download ${r.status}`);return `data:${r.headers.get("content-type")||"image/jpeg"};base64,${Buffer.from(await r.arrayBuffer()).toString("base64")}`;}
+function providers():Provider[]{
+  const list:Provider[]=[];
+  const openai=(process.env.OPENAI_API_KEY||"").trim();
+  if(openai)list.push({id:"openai",run:async(prompt,timeout)=>{
+    const r=await fetch("https://api.openai.com/v1/images/generations",{method:"POST",headers:{Authorization:`Bearer ${openai}`,"Content-Type":"application/json"},body:JSON.stringify({model:OPENAI_IMAGE_MODEL,prompt,size:"1536x1024",quality:"medium",output_format:"jpeg",output_compression:88,n:1}),signal:AbortSignal.timeout(timeout)});
+    const j=await r.json().catch(()=>({}));const msg=j?.error?.message??"";
+    if(!r.ok){if(isQuota(r.status,msg))throw new QuotaError(msg);throw new Error(msg||`openai ${r.status}`);}
+    const b64=j?.data?.[0]?.b64_json;if(!b64)throw new Error("openai empty");return `data:image/jpeg;base64,${b64}`;
+  }});
+  const {key}=resolveKey();
+  if(key)list.push({id:"gemini",run:async(prompt,timeout)=>{
+    const ai=new GoogleGenAI({apiKey:key});const started=Date.now();
+    const models=[...new Set([GEMINI_IMAGE_MODEL,...await discoverImageModels(ai)])].slice(0,3);let quota=0;
+    for(const model of models){
+      const left=timeout-(Date.now()-started);if(left<5000)break;
+      try{const r=await ai.models.generateContent({model,contents:prompt,config:{responseModalities:[Modality.TEXT,Modality.IMAGE],httpOptions:{timeout:left}}});
+        for(const p of r.candidates?.[0]?.content?.parts??[])if(p.inlineData?.data)return `data:${p.inlineData.mimeType||"image/png"};base64,${p.inlineData.data}`;}
+      catch(e){const msg=e instanceof Error?e.message:"";if(isQuota(0,msg))quota++;console.warn("Lara image unavailable",model,msg.slice(0,160));}
+    }
+    if(quota&&quota===models.length)throw new QuotaError("gemini quota");throw new Error("gemini image failed");
+  }});
+  const fal=(process.env.FAL_KEY||"").trim();
+  if(fal)list.push({id:"fal",run:async(prompt,timeout)=>{
+    const r=await fetch(`https://fal.run/${FAL_IMAGE_MODEL}`,{method:"POST",headers:{Authorization:`Key ${fal}`,"Content-Type":"application/json"},body:JSON.stringify({prompt,image_size:"landscape_16_9",num_images:1,enable_safety_checker:true}),signal:AbortSignal.timeout(timeout)});
+    const j=await r.json().catch(()=>({}));const msg=typeof j?.detail==="string"?j.detail:JSON.stringify(j?.detail??"");
+    if(!r.ok){if(isQuota(r.status,msg))throw new QuotaError(msg);throw new Error(msg||`fal ${r.status}`);}
+    const url=j?.images?.[0]?.url;if(!url)throw new Error("fal empty");
+    // Converti en data URL côté serveur : la borne peut y composer le logo sans restriction CORS.
+    return toDataUrl(url,Math.min(15000,timeout));
+  }});
+  return list;
+}
 export async function getImage(prompt:string,lang?:string):Promise<ImageResult>{
   const unavailable=lang==="en"?"Image generation temporarily unavailable.":"Génération d’image momentanément indisponible.";
-  const {key,provider}=resolveKey();if(!key||provider!=="gemini")return {ok:false,message:unavailable};
-  const ai=new GoogleGenAI({apiKey:key});const started=Date.now();
-  const discovery=discoverImageModels(ai);
-  const models=[...new Set([workingImageModel,GEMINI_IMAGE_MODEL,...await discovery,"gemini-2.5-flash-image"].filter(Boolean) as string[])].slice(0,4);
-  for(const [i,model] of models.entries()){
-    // Le modèle principal garde l’essentiel du budget ; le secours utilise le temps restant (maxDuration 60 s).
-    const left=IMAGE_DEADLINE_MS-(Date.now()-started);if(left<8000)break;
-    const timeout=i===models.length-1?left:Math.min(40000,left-8000);
-    try{
-      const r=await ai.models.generateContent({model,contents:`${prompt.slice(0,800)}\n\n${AGL_IMAGE_STYLE}`,config:{responseModalities:[Modality.TEXT,Modality.IMAGE],httpOptions:{timeout}}});
-      let image="";let text="";
-      for(const p of r.candidates?.[0]?.content?.parts??[]){if(p.inlineData?.data)image=`data:${p.inlineData.mimeType||"image/png"};base64,${p.inlineData.data}`;else if(p.text)text+=p.text;}
-      if(image){workingImageModel=model;return {ok:true,image,text:text.slice(0,600),model};}
-    }catch(e){if(workingImageModel===model)workingImageModel=null;console.warn("Lara image unavailable",model,e instanceof Error?e.message.slice(0,200):"unknown");}
+  const started=Date.now();const full=`${prompt.slice(0,800)}\n\n${AGL_IMAGE_STYLE}`;
+  const all=providers();
+  const ready=all.filter(p=>(cooldown.get(p.id)??0)<Date.now());
+  for(const [i,p] of (ready.length?ready:all).entries()){
+    const left=IMAGE_DEADLINE_MS-(Date.now()-started);if(left<6000)break;
+    const isLast=i===(ready.length?ready:all).length-1;
+    try{const image=await p.run(full,isLast?left:Math.min(35000,left-6000));return {ok:true,image,text:"",model:p.id};}
+    catch(e){if(e instanceof QuotaError)cooldown.set(p.id,Date.now()+COOLDOWN_MS);console.warn("Lara image provider unavailable",p.id,e instanceof Error?e.message.slice(0,200):"unknown");}
   }
   return {ok:false,message:unavailable};
 }

@@ -4,6 +4,8 @@ export type MiningStage = "exploration" | "construction" | "production" | "expor
 export type StepMode = "road" | "rail" | "sea" | "air" | "port" | "warehouse" | "customs" | "heavy_lift" | "mining" | "digital" | "people";
 export interface SolutionStep { label: string; detail: string; mode?: StepMode }
 export interface SolutionPoint { label: string; text: string }
+export type ChartKind = "bar" | "line" | "donut";
+export interface Chart { title: string; kind: ChartKind; labels: string[]; values: number[]; unit?: string; source?: string }
 export interface Solution { title: string; summary: string; steps: SolutionStep[]; considerations: SolutionPoint[]; route?: RouteId; miningStage?: MiningStage; imagePrompt?: string; next: Screen[] }
 export type MaterialAction =
   | { type: "show_route"; route: RouteId }
@@ -13,6 +15,8 @@ export type MaterialAction =
   | { type: "show_image"; title: string; image: string; text: string }
   | { type: "render_image"; title: string; prompt: string }
   | { type: "solution"; solution: Solution }
+  | { type: "render_video"; title: string; prompt: string }
+  | { type: "chart"; chart: Chart }
   | { type: "go"; screen: Screen };
 export const ALLOWED_SCREENS = ["home", "games", "mission", "explore", "build", "vision", "mining", "corporate", "appointment", "careers", "quotation", "satisfaction", "market", "canvas"];
 export const ROUTES: RouteId[] = ["route-A", "route-B", "route-C"];
@@ -34,6 +38,8 @@ export function parseToolAction(name?:string, args:Record<string,unknown>={ }):M
   if(name==="show_route"&&ROUTES.includes(args.route as RouteId))return {type:"show_route",route:args.route as RouteId};
   if(name==="show_mining"&&MINING_STAGES.includes(args.stage as MiningStage))return {type:"show_mining",stage:args.stage as MiningStage};
   if(name==="show_solution"){const solution=parseSolution(args);return solution?{type:"solution",solution}:null;}
+  if(name==="generate_video"&&typeof args.prompt==="string"&&args.prompt.trim())return {type:"render_video",title:str(args.title,150)||"Film Africa Global Logistics",prompt:args.prompt.slice(0,1500)};
+  if(name==="show_chart"){const labels=(Array.isArray(args.labels)?args.labels:[]).slice(0,12).map(l=>String(l).slice(0,40));const values=(Array.isArray(args.values)?args.values:[]).slice(0,labels.length).map(Number);const title=str(args.title,150);if(title&&labels.length>=2&&values.length===labels.length&&values.every(Number.isFinite))return {type:"chart",chart:{title,kind:(["bar","line","donut"].includes(String(args.kind))?args.kind:"bar") as ChartKind,labels,values,unit:str(args.unit,20)||undefined,source:str(args.source,200)||undefined}};return null;}
   if(name==="open_brief"&&typeof args.title==="string"&&typeof args.body==="string")return {type:"sheet",title:args.title.slice(0,150),body:args.body.slice(0,2000)};
   if(name==="generate_image"&&typeof args.prompt==="string"&&args.prompt.trim()){const style=typeof args.style==="string"?args.style:"";return {type:"render_image",title:style?`Illustration · ${style}`:"Illustration",prompt:`${args.prompt.slice(0,700)}${STYLE_HINT[style]?` (${STYLE_HINT[style]})`:""}`};}
   if(name==="open_studio"&&["image","schema","storyboard","doc"].includes(String(args.tab))&&typeof args.title==="string"&&typeof args.body==="string")return {type:"open_studio",tab:args.tab as "image"|"schema"|"storyboard"|"doc",title:args.title.slice(0,150),body:args.body.slice(0,4000)};
@@ -44,6 +50,8 @@ export function parseToolAction(name?:string, args:Record<string,unknown>={ }):M
 export function describeAction(a: MaterialAction): string {
   switch (a.type) {
     case "solution": return `Vue solution « ${a.solution.title} » affichée : ${a.solution.steps.length} étapes${a.solution.route ? `, carte ${a.solution.route}` : ""}${a.solution.imagePrompt ? ", visuel en cours de création" : ""}.`;
+    case "render_video": return "Film en cours de tournage, il s’affiche dans la vue dans une vingtaine de secondes avec le logo Africa Global Logistics.";
+    case "chart": return `Graphique « ${a.chart.title} » affiché (${a.chart.labels.length} valeurs${a.chart.source?`, source ${a.chart.source}`:", illustratif"}).`;
     case "render_image": return "Illustration en cours de création, elle s’affiche dans la vue dans quelques secondes.";
     case "show_route": return `Carte du corridor ${a.route} affichée.`;
     case "show_mining": return `Parcours Mining ouvert sur l’étape ${a.stage}.`;

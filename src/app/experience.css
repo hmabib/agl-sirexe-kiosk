@@ -31,7 +31,14 @@
 .intent-card h2 { margin-top:7px; font-weight:700; font-size:21px; }
 .intent-card p { margin-top:7px; font-size:13px; color:var(--muted); }
 .attract-page { position:absolute; inset:0; overflow:auto; background:#1b365f; cursor:pointer; padding:36px 6vw 22px; display:flex; flex-direction:column; }
-.attract-photo { position:absolute; inset:0; background:linear-gradient(90deg,#122948fa 0%,#1b365fea 50%,#102139ad),url('/assets/template/image1.webp') center/cover; pointer-events:none; }
+.attract-video { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; pointer-events:none; }
+/* Voile navy : le film reste visible à droite, le texte reste lisible à gauche */
+.attract-photo { position:absolute; inset:0; background:linear-gradient(90deg,#102542f2 0%,#1b365fd0 42%,#1b365f9c 70%,#0a1a33b3 100%),linear-gradient(0deg,#0a1a33cc,transparent 30%); pointer-events:none; }
+.attract-chapters { position:absolute; left:6vw; bottom:58px; z-index:1; display:flex; flex-direction:column; gap:10px; pointer-events:none; }
+.attract-chapter-bars { display:flex; gap:6px; }
+.attract-chapter-bars span { width:54px; height:3px; border-radius:3px; background:#ffffff2b; overflow:hidden; }
+.attract-chapter-bars i { display:block; height:100%; background:#EED58E; transform-origin:left; transition:transform .25s linear; }
+.attract-chapter-label { font-size:12px; font-weight:700; letter-spacing:.16em; text-transform:uppercase; color:#EED58E; }
 .attract-top,.attract-body,.attract-bottom { position:relative; }
 .attract-top { display:flex; justify-content:space-between; align-items:center; }
 .attract-body { display:grid; grid-template-columns:1.1fr 1fr; gap:30px; flex:1; align-items:center; }
@@ -246,3 +253,19 @@
 .glass-backdrop { background:#020a1855; backdrop-filter:blur(6px); }
 .glass-surface { background:linear-gradient(160deg,#13305ac2,#081a36d9) !important; backdrop-filter:blur(26px) saturate(160%); border-color:#ffffff22; box-shadow:0 24px 80px #0007, inset 0 1px 0 #ffffff14; }
 .live-stage .live-steps li, .live-points > div { background:#ffffff0a; backdrop-filter:blur(6px); }
+
+/* Film AGL : logo et bandeau charte incrustés sur la vidéo */
+.brand-film { position:relative; border-radius:18px; overflow:hidden; background:#04122a; box-shadow:0 18px 50px #0007; }
+.brand-film video { display:block; width:100%; aspect-ratio:16/9; object-fit:cover; }
+.brand-film-band { position:absolute; left:0; right:0; bottom:0; display:flex; align-items:flex-end; justify-content:space-between; padding:40px 22px 16px; background:linear-gradient(180deg,transparent,#1b365fb8 55%,#0a1a33f0); border-bottom:4px solid #EED58E; }
+.brand-film-band span { font-size:12px; font-weight:700; letter-spacing:.12em; color:#EED58Eeb; }
+.brand-film-band img { width:clamp(90px,14%,150px); height:auto; }
+.live-skeleton.film { flex-direction:column; aspect-ratio:16/9; min-height:0; }
+.film-progress { width:min(320px,70%); height:4px; border-radius:4px; background:#ffffff1a; overflow:hidden; }
+.film-progress i { display:block; height:100%; background:#EED58E; transition:width .8s ease; }
+.chart-svg { display:block; margin-top:6px; }
+.chart-donut { display:flex; flex-wrap:wrap; align-items:center; gap:28px; }
+.chart-legend { list-style:none; padding:0; margin:0; display:grid; gap:10px; min-width:220px; }
+.chart-legend li { display:flex; align-items:center; gap:10px; font-size:15px; color:#dbe6f5; }
+.chart-legend i { width:12px; height:12px; border-radius:4px; flex:none; }
+.chart-legend strong { margin-left:auto; color:#fff; }

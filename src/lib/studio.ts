@@ -95,3 +95,21 @@ export function splitScenes(body: string): string[] {
   const numbered = body.split(/(?=^\d+[.)]\s)/m).map(s => s.trim()).filter(Boolean);
   return (numbered.length > 1 ? numbered : [body.trim()].filter(Boolean)).slice(0, 6);
 }
+
+// Film : lancement puis suivi de la file d’attente ; onStatus fait vivre la vue pendant le tournage.
+export async function generateStudioVideo(prompt: string, onStatus?: (s: "queued" | "filming") => void, signal?: AbortSignal): Promise<string> {
+  const start = await fetch("/api/studio/video", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prompt }), signal });
+  const j = await start.json().catch(() => ({}));
+  if (!start.ok || !j.job) throw new Error(j.message || "video failed");
+  const deadline = Date.now() + 180000;
+  for (let wait = 2500; Date.now() < deadline; wait = Math.min(4000, wait + 500)) {
+    await new Promise(r => setTimeout(r, wait));
+    if (signal?.aborted) throw new Error("aborted");
+    const r = await fetch(`/api/studio/video?job=${encodeURIComponent(j.job)}`, { signal });
+    const s = await r.json().catch(() => ({}));
+    if (!r.ok || !s.ok) throw new Error(s.message || "video failed");
+    if (s.status === "done" && s.url) return s.url;
+    onStatus?.(s.status);
+  }
+  throw new Error("video timeout");
+}
