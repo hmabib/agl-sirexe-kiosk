@@ -15,11 +15,10 @@ npm run dev
 
 | Variable | Usage |
 |---|---|
-| `GEMINI_API_KEY` | Clé serveur Gemini, jamais envoyée au navigateur. Aucun routage selon son préfixe. |
+| `GEMINI_API_KEY` | Clé serveur IA, jamais envoyée au navigateur. |
 | `GEMINI_MODEL` | Modèle texte/image configuré ; repli `gemini-flash-latest` en cas d’indisponibilité. |
 | `GEMINI_LIVE_MODEL` | Modèle compatible Live API pour l’audio natif et les images caméra. |
 | `GEMINI_TTS_MODEL` | Modèle audio pour la lecture serveur des réponses texte ; synthèse navigateur en repli. |
-| `MISTRAL_API_KEY` | Alternative texte uniquement si aucune clé Gemini n’est configurée. |
 | `NEXT_PUBLIC_ADMIN_PW` | Verrou d’interface `/admin`, vérifié côté client ; ne constitue pas une authentification serveur. |
 
 Les noms de modèles sont configurables et leur disponibilité dépend du compte fournisseur. Un badge « configuré » indique la présence d’une clé, pas une connexion Live vérifiée. Les fichiers `.env*` contenant les valeurs et `.vercel/` sont exclus de Git.
@@ -33,7 +32,7 @@ Les noms de modèles sont configurables et leur disponibilité dépend du compte
 | `/experiences` | Mission Control, Explore, Build et Vision Lab |
 | `/mining` | Cycle minier, cas Tokadeh Phase II et quiz |
 | `/mission`, `/explore`, `/build` | Simulations logistiques interactives |
-| `/vision` | Caméra opt-in, détection locale et conversation Gemini Live |
+| `/vision` | Caméra opt-in, détection locale, voix en direct et scan de carte de visite |
 | `/presentation` | Expertises AGL et fiche téléchargeable |
 | `/rendez-vous`, `/emploi` | Préparation de demandes locales et téléchargement JSON |
 | `/cotation` | Formulaire officiel AGL, lien direct et QR code |
@@ -57,9 +56,15 @@ Les boutons de fin d’expérience mènent à `/satisfaction`. Les formulaires e
 
 ## IA
 
-`/api/gemini/stream` utilise le streaming natif du SDK Google et les derniers tours de conversation. Le contexte de l’écran et `knowledge/*.md` sont inclus dans les instructions. Les outils autorisés peuvent ouvrir un parcours, afficher un corridor ou une fiche téléchargeable.
+`/api/gemini/stream` utilise le streaming natif du SDK IA et les derniers tours de conversation. Le contexte de l’écran et `knowledge/*.md` sont inclus dans les instructions. Les outils autorisés peuvent ouvrir un parcours, afficher un corridor ou une fiche téléchargeable.
 
-`/api/live/token` crée un jeton éphémère à usage unique. Le navigateur utilise ce jeton pour la Live API : micro PCM16/16 kHz, audio de sortie 24 kHz, transcriptions et images caméra réduites. La clé permanente reste côté serveur. HTTPS ou localhost et les autorisations navigateur sont nécessaires.
+`/api/live/token` crée un jeton éphémère à usage unique. Le navigateur utilise ce jeton pour la voix en direct : micro PCM16/16 kHz, audio de sortie 24 kHz, transcriptions et images caméra réduites. La clé permanente reste côté serveur. HTTPS ou localhost et les autorisations navigateur sont nécessaires.
+
+## Studio créatif et carte de visite
+
+Le bouton « Parlons ensemble » ouvre AGL AI et démarre directement la voix. L’IA peut matérialiser : parcours (navigation), corridors, fiches, et espace créatif (`open_studio`, `generate_image`). Le Studio créatif propose 4 onglets : image générée à la demande avec animation, schéma logistique dessiné depuis une description, storyboard avec montage narré et musique d’ambiance, document transformable (schéma, lecture à voix haute, téléchargement). Chaque création propose des liens vers les parcours concernés de la borne.
+
+« Filmer une carte de visite » (Vision Lab) capture la carte filmée et en lit les coordonnées par reconnaissance visuelle : vérifiez, puis pré-remplissez le rendez-vous ou téléchargez le JSON. Aucun fournisseur secondaire n’est utilisé : une seule clé IA principale.
 
 ## Charte et ressources
 
@@ -76,6 +81,6 @@ npm run start -- --port 3120
 npm run test:e2e
 ```
 
-Les tests navigateur vérifient les parcours, exports, liens/QR codes, responsive et libération caméra. Les scénarios IA sont mockés : un contrôle fournisseur réel séparé est nécessaire pour valider Gemini Live.
+Les tests navigateur vérifient les parcours, exports, liens/QR codes, responsive et libération caméra. Les scénarios IA sont mockés : un contrôle fournisseur réel séparé est nécessaire pour valider la voix en direct, la génération d’images et la lecture de cartes.
 
 Déploiement : configurer les variables Production du projet Vercel, puis `vercel --prod`. `next.config.ts` inclut `knowledge/` dans le tracing serveur.

@@ -40,7 +40,7 @@ test("AI streams history and opens a real route sheet",async({page})=>{
 });
 
 test("camera starts, Live errors gracefully and stop releases the device",async({page,context})=>{
-  await context.grantPermissions(["camera","microphone"]);await page.route("**/api/live/token",r=>r.fulfill({status:503,contentType:"application/json",body:JSON.stringify({message:"Conversation Live momentanément indisponible."})}));await page.goto("/vision");await page.getByRole("button",{name:"ACTIVER LA CAMÉRA",exact:true}).click();await expect.poll(()=>page.locator("video").evaluate((v:HTMLVideoElement)=>v.readyState)).toBeGreaterThanOrEqual(2);await page.getByRole("button",{name:"ACTIVER LE MICRO & PARLER"}).click();await expect(page.getByText("Conversation Live momentanément indisponible.",{exact:true})).toBeVisible();await page.getByRole("button",{name:"Arrêter la caméra"}).click();await expect(page.getByRole("button",{name:"ACTIVER LA CAMÉRA",exact:true})).toBeVisible();expect(await page.locator("video").evaluate((v:HTMLVideoElement)=>v.srcObject)).toBeNull();
+  await context.grantPermissions(["camera","microphone"]);await page.route("**/api/live/token",r=>r.fulfill({status:503,contentType:"application/json",body:JSON.stringify({message:"Conversation vocale momentanément indisponible."})}));await page.goto("/vision");await page.getByRole("button",{name:"ACTIVER LA CAMÉRA",exact:true}).click();await expect.poll(()=>page.locator("video").evaluate((v:HTMLVideoElement)=>v.readyState)).toBeGreaterThanOrEqual(2);await page.getByRole("button",{name:"ACTIVER LE MICRO & PARLER"}).click();await expect(page.getByText("Conversation vocale momentanément indisponible.",{exact:true})).toBeVisible();await page.getByRole("button",{name:"Arrêter la caméra"}).click();await expect(page.getByRole("button",{name:"ACTIVER LA CAMÉRA",exact:true})).toBeVisible();expect(await page.locator("video").evaluate((v:HTMLVideoElement)=>v.srcObject)).toBeNull();
 });
 
 test("portrait kiosk remains readable with no horizontal clipping",async({page})=>{
@@ -80,4 +80,23 @@ test("Mission updates incidents and finishes with the selected reroute",async({p
   await expect(page.getByText("Route + Rail + Mer",{exact:true})).toBeVisible();
   await page.getByRole("button",{name:/TERMINER & DONNER MON AVIS/}).click();
   await expect(page).toHaveURL(/satisfaction$/);
+});
+
+test("Studio creates an image live and links to kiosk journeys",async({page,context})=>{
+  await context.grantPermissions(["camera","microphone"]);
+  await page.route("**/api/studio/image",r=>r.fulfill({status:200,contentType:"application/json",body:JSON.stringify({ok:true,image:"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",text:"Corridor illustré.",model:"test-image"})}));
+  await page.goto("/vision");await page.getByRole("button",{name:"ACTIVER LA CAMÉRA",exact:true}).click();await expect.poll(()=>page.locator("video").evaluate((v:HTMLVideoElement)=>v.readyState)).toBeGreaterThanOrEqual(2);
+  await page.getByRole("button",{name:/Studio créatif/}).click();await expect(page.getByRole("dialog",{name:/Studio créatif/})).toBeVisible();
+  await page.getByLabel("Sujet de l’image").fill("Corridor logistique au lever du soleil");await page.getByRole("button",{name:/Générer l’image/}).click();
+  await expect(page.getByRole("img",{name:"Visuel généré"})).toBeVisible();await expect(page.getByRole("button",{name:/Mission Control/})).toBeVisible();
+});
+
+test("Business card films, reads and prefills the appointment",async({page,context})=>{
+  await context.grantPermissions(["camera","microphone"]);
+  await page.route("**/api/gemini",r=>r.fulfill({status:200,contentType:"application/json",body:JSON.stringify({reply:'{"name":"Awa Diallo","company":"Mine Nord CI","role":"Directrice achats","email":"awa@example.com","phone":"+225 0700000000"}',provider:"gemini",model:"test"})}));
+  await page.goto("/vision");await page.getByRole("button",{name:"ACTIVER LA CAMÉRA",exact:true}).click();await expect.poll(()=>page.locator("video").evaluate((v:HTMLVideoElement)=>v.readyState)).toBeGreaterThanOrEqual(2);
+  await page.getByRole("button",{name:/Filmer une carte/}).click();await page.getByRole("button",{name:/Capturer & lire/}).click();
+  await expect(page.getByLabel("Nom",{exact:true})).toHaveValue("Awa Diallo");
+  await page.getByRole("button",{name:/Utiliser pour le rendez-vous/}).click();
+  await expect(page).toHaveURL(/rendez-vous$/);await expect(page.getByLabel("Nom et prénom")).toHaveValue("Awa Diallo");await expect(page.getByText("Pré-rempli depuis la carte de visite scannée")).toBeVisible();
 });

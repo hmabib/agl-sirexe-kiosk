@@ -5,17 +5,29 @@ export interface StreamResult { reply: string; provider: string; model: string; 
 
 // Streaming SSE natif : onToken reçoit le texte cumulé.
 export async function askStream(
-  payload: { message: string; context?: unknown; image?: string; lang?: string; model?: string; voice?: boolean; history?: {role:"user"|"ai";text:string}[] },
+  payload: { message: string; context?: unknown; image?: string; lang?: string; model?: string; voice?: boolean; deepThink?: boolean; history?: {role:"user"|"ai";text:string}[] },
   onToken: (full: string) => void,
   signal?: AbortSignal
 ): Promise<StreamResult> {
-  const res = await fetch("/api/gemini/stream", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-    signal,
-  });
-  if (!res.ok || !res.body) throw new Error("stream failed");
+  let res: Response;
+  try {
+    res = await fetch("/api/gemini/stream", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+      signal,
+    });
+  } catch {
+    throw new Error("stream failed");
+  }
+  if (!res.ok || !res.body) {
+    let message = "stream failed";
+    try {
+      const err = await res.json();
+      if (typeof err.message === "string" && err.message) message = err.message;
+    } catch { /* ignore */ }
+    throw new Error(message);
+  }
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
   let full = "";
@@ -37,6 +49,7 @@ export async function askStream(
       } catch { /* ignore */ }
     }
   }
+  if (!meta.reply && !full) throw new Error("stream failed");
   meta.reply = meta.reply || full;
   return meta;
 }

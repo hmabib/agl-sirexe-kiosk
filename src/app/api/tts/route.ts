@@ -4,7 +4,7 @@ import { GEMINI_TTS_MODEL } from "@/lib/ai-server";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-// POST { text, lang } -> { audio: data:audio/wav;base64 } (voix studio Gemini)
+// POST { text, lang } -> { audio: data:audio/wav;base64 } (voix studio AGL AI)
 // 503 si indisponible -> le client bascule sur la synthèse locale.
 export async function POST(req: NextRequest) {
   try {

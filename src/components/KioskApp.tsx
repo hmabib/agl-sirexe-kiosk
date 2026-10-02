@@ -18,6 +18,7 @@ import { RequestForm } from "./RequestForm";
 import { ExternalExperience } from "./ExternalExperience";
 import { MarketScreen } from "./Market";
 import { MaterialHost } from "./MaterialHost";
+import { StudioHost } from "./StudioPanel";
 
 const VisionLab = dynamic(() => import("@/components/VisionLab").then((m) => m.VisionLab), { ssr: false });
 
@@ -124,6 +125,7 @@ function Shell() {
 
       {!["attract", "satisfaction", "quotation", "vision"].includes(k.screen) && <AIAssistant />}
       <MaterialHost />
+      <StudioHost />
     </div>
   );
 }

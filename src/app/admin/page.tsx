@@ -41,7 +41,7 @@ export default function AdminPage() {
   return (
     <div className="h-screen overflow-y-auto text-white p-8 max-w-4xl mx-auto" style={{ background: "#000a18" }}>
       <h1 className="text-3xl font-extrabold">AGL • ADMIN BORNE</h1>
-      <p className="text-white/60 text-sm">Textes • scénarios • modèle Gemini • idle • toggles. Stocké local (V1).</p>
+      <p className="text-white/60 text-sm">Textes • scénarios • modèle IA • idle • toggles. Stocké local.</p>
       <div className="grid md:grid-cols-2 gap-4 mt-6">
         <label className="glass rounded-2xl p-4">Modèle IA texte
           <select value={cfg.model} onChange={(e) => setCfg({ ...cfg, model: e.target.value })} className="mt-2 h-12 w-full rounded-xl bg-black/40 border border-white/15 px-3">

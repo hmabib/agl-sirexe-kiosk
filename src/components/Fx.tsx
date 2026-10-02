@@ -204,13 +204,9 @@ export function ModelBadge() {
     fetch("/api/gemini").then((r) => r.json()).then(setInfo).catch(() => {});
   }, []);
   if (!info) return <span className="text-[11px] text-white/40">● IA…</span>;
-  const label = !info.configured
-    ? "● MOCK • DÉMO"
-    : info.provider === "mistral"
-      ? `● ${info.textModel.toUpperCase()} · CONFIGURÉ`
-      : `● ${String(info.textModel).toUpperCase()} · CONFIGURÉ`;
+  const label = !info.configured ? "● IA · HORS LIGNE" : "● AGL AI · EN LIGNE";
   return (
-    <span title={JSON.stringify(info)} className={`text-[11px] font-bold px-3 h-9 hidden md:flex items-center rounded-full border ${info.configured ? "text-[#5df2c8] border-[#5df2c8]/30 bg-[#5df2c8]/10" : "text-white/40 border-white/15 bg-white/5"}`}>
+    <span title={info.configured ? "AGL AI configurée" : "IA non configurée"} className={`text-[11px] font-bold px-3 h-9 hidden md:flex items-center rounded-full border ${info.configured ? "text-[#5df2c8] border-[#5df2c8]/30 bg-[#5df2c8]/10" : "text-white/40 border-white/15 bg-white/5"}`}>
       {label}
     </span>
   );

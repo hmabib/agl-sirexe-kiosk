@@ -21,6 +21,7 @@ export async function POST(req: NextRequest) {
       modelOverride: body.model,
       voice: body.voice === true,
       history: body.history,
+      deepThink: body.deepThink === true,
     });
     return NextResponse.json(result);
   } catch {
