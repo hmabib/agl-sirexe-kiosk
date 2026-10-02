@@ -95,7 +95,7 @@ export function MissionScreen() {
 
   return (
     <div className="absolute inset-0 overflow-y-auto kiosk-scroll" style={{ background: "linear-gradient(180deg,#001D3D,#00060f)" }}>
-      <TopBar title="AGL MISSION CONTROL" subtitle={k.lang === "fr" ? "Acheminez une cargaison stratégique jusqu'au marché international." : "Move strategic cargo to the international market."} />
+      <TopBar title="AFRICA GLOBAL LOGISTICS MISSION CONTROL" subtitle={k.lang === "fr" ? "Acheminez une cargaison stratégique jusqu'au marché international." : "Move strategic cargo to the international market."} />
       {/* stepper */}
       <div className="flex gap-2 px-6 md:px-10 mt-4 max-w-6xl mx-auto">
         {["Cargaison", "Scénario", "Route", "Incident", "Succès"].map((s, i) => (
@@ -218,7 +218,7 @@ export function MissionScreen() {
                   ["A", k.lang === "fr" ? "Continuer" : "Continue"],
                   ["B", k.lang === "fr" ? "Changer de route" : "Reroute"],
                   ["C", k.lang === "fr" ? "Ajouter une étape logistique" : "Add logistics leg"],
-                  ["D", "🤖 Demander à AGL AI"],
+                  ["D", "🤖 Demander à Lara"],
                 ].map(([id, label]) => (
                   <button key={id} onClick={() => {
                     k.touch(); sfx(id === "D" ? "whoosh" : "alert");
@@ -257,7 +257,7 @@ export function MissionScreen() {
                   <div key={l} className="glass rounded-2xl p-4"><div className="text-xs text-[#D6A84B] font-bold tracking-widest">{l}</div><div className="text-xl font-extrabold">{v}</div></div>
                 ))}
               </div>
-              <h3 className="mt-8 tracking-[0.25em] text-[#F2D28B] font-bold">LE SAVOIR-FAIRE AGL MOBILISÉ</h3>
+              <h3 className="mt-8 tracking-[0.25em] text-[#F2D28B] font-bold">LE SAVOIR-FAIRE AFRICA GLOBAL LOGISTICS MOBILISÉ</h3>
               <div className="flex flex-wrap justify-center gap-2 mt-4">
                 {expertise.map((e, i) => (
                   <motion.span key={e} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.12 }}

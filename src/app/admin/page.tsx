@@ -2,6 +2,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { listRequests, exportRequestsCSV, type LocalRequest } from "@/lib/requests";
+import { AdminStats } from "@/components/AdminStats";
 
 interface ModelInfo { provider: string; configured: boolean; textModel: string; liveModel: string; ttsModel: string; knowledge: number }
 interface AnalyticsEvent { ts: string; name: string; data: Record<string, unknown> }
@@ -31,7 +32,7 @@ export default function AdminPage() {
   if (!ok)
     return (
       <div className="h-screen flex flex-col items-center justify-center gap-4 text-white" style={{ background: "#000a18" }}>
-        <h1 className="text-3xl font-extrabold">AGL • ADMIN</h1>
+        <h1 className="text-3xl font-extrabold">AFRICA GLOBAL LOGISTICS • ADMIN</h1>
         <input type="password" value={pw} onChange={(e) => setPw(e.target.value)} onKeyDown={(e) => e.key === "Enter" && login()} placeholder="Mot de passe" className="h-14 w-80 rounded-xl bg-white/10 border border-white/20 px-4" />
         <button onClick={login} className="h-14 w-80 rounded-xl bg-[#D6A84B] text-[#001D3D] font-extrabold">DÉVERROUILLER</button>
         <Link href="/" className="text-white/50 text-sm">← borne</Link>
@@ -40,7 +41,7 @@ export default function AdminPage() {
 
   return (
     <div className="h-screen overflow-y-auto text-white p-8 max-w-4xl mx-auto" style={{ background: "#000a18" }}>
-      <h1 className="text-3xl font-extrabold">AGL • ADMIN BORNE</h1>
+      <h1 className="text-3xl font-extrabold">AFRICA GLOBAL LOGISTICS • ADMIN BORNE</h1>
       <p className="text-white/60 text-sm">Textes • scénarios • modèle IA • idle • toggles. Stocké local.</p>
       <div className="grid md:grid-cols-2 gap-4 mt-6">
         <label className="glass rounded-2xl p-4">Modèle IA texte
@@ -60,6 +61,7 @@ export default function AdminPage() {
         ))}
       </div>
       <button onClick={() => { localStorage.setItem("agl_cfg", JSON.stringify(cfg)); try { localStorage.setItem("agl_model", cfg.model); } catch {} alert(`Config enregistrée — modèle borne : ${cfg.model}`); }} className="mt-4 h-14 px-8 rounded-xl bg-[#D6A84B] text-[#001D3D] font-extrabold">💾 ENREGISTRER</button>
+      <AdminStats />
       <h2 className="mt-8 font-bold text-[#F2D28B]">ANALYTICS (50 derniers, anonymes)</h2>
       <h2 className="mt-8 font-bold text-[#EED58E]">DEMANDES LOCALES · {requests.length}</h2>
       <button className="brand-btn mt-3" onClick={exportRequestsCSV}>Exporter RDV & candidatures en CSV</button>

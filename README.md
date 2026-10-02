@@ -1,6 +1,6 @@
-# AGL × SIREXE — Borne immersive
+# Africa Global Logistics × SIREXE — Borne immersive
 
-Borne tactile Next.js, React et Tailwind : Mining, logistique, présentation AGL, préparation de rendez-vous et candidatures, cotation et enquête de satisfaction.
+Borne tactile Next.js, React et Tailwind : Mining, logistique, présentation Africa Global Logistics, préparation de rendez-vous et candidatures, cotation et enquête de satisfaction.
 
 ## Lancement
 
@@ -33,13 +33,14 @@ Les noms de modèles sont configurables et leur disponibilité dépend du compte
 | `/mining` | Cycle minier, cas Tokadeh Phase II et quiz |
 | `/mission`, `/explore`, `/build` | Simulations logistiques interactives |
 | `/vision` | Caméra opt-in, détection locale, voix en direct et scan de carte de visite |
-| `/presentation` | Expertises AGL et fiche téléchargeable |
+| `/presentation` | Expertises Africa Global Logistics et fiche téléchargeable |
 | `/rendez-vous`, `/emploi` | Préparation de demandes locales et téléchargement JSON |
-| `/cotation` | Formulaire officiel AGL, lien direct et QR code |
+| `/cotation` | Formulaire officiel Africa Global Logistics, lien direct et QR code |
 | `/satisfaction` | Enquête officielle Microsoft Forms, lien direct et QR code |
 | `/performance` | Croissance du PIB CI sourcée Banque mondiale et simulation séparée |
+| `/canvas` | Canvas Lara : générations réelles (image, schéma, storyboard narré, document) |
 | `/resultats` | Résultats et passage vers l’enquête |
-| `/admin` | Demandes locales, export CSV et analytics |
+| `/admin` | Demandes locales, export CSV et analytics avancées (sessions, entonnoir, graphiques) |
 | `/demo` | Démonstration automatique |
 
 Les boutons de fin d’expérience mènent à `/satisfaction`. Les formulaires externes proposent un lien direct et un QR code si leur hébergement empêche l’intégration en iframe.
@@ -49,7 +50,7 @@ Les boutons de fin d’expérience mènent à `/satisfaction`. Les formulaires e
 - Les rendez-vous et candidatures sont stockés dans le navigateur de la borne et exportables en JSON/CSV. Aucune réservation, transmission RH ou synchronisation CRM n’est réalisée.
 - Les contours de l’Afrique proviennent de Natural Earth. Les fonds interactifs utilisent OpenStreetMap/CARTO ; un mode vectoriel sert de repli si les tuiles sont indisponibles.
 - Les liaisons, scores, délais, coûts, CO₂ et impacts des jeux sont illustratifs. Les villes sont réelles ; la faisabilité d’un transport exige une étude de route.
-- Le cas Tokadeh reprend les éléments documentaires AGL : concentrateur à Tokadeh, chargeur à Buchanan et 34 navires affrétés déchargés. Les visuels du template sont des illustrations métier.
+- Le cas Tokadeh reprend les éléments documentaires Africa Global Logistics : concentrateur à Tokadeh, chargeur à Buchanan et 34 navires affrétés déchargés. Les visuels du template sont des illustrations métier.
 - `/api/market` récupère la croissance annuelle réelle du PIB de la Côte d’Ivoire, indicateur Banque mondiale `NY.GDP.MKTP.KD.ZG`. En cas d’indisponibilité, aucune donnée de substitution n’est inventée.
 - Les demandes micro/caméra sont explicites. Les flux sont arrêtés à la fermeture. L’application n’enregistre pas les conversations ni les vidéos ; l’IA reçoit les données nécessaires pendant leur utilisation.
 - Réinitialisation après 90 secondes d’inactivité, portée à 300 secondes pour les formulaires et Vision Lab.
@@ -62,7 +63,7 @@ Les boutons de fin d’expérience mènent à `/satisfaction`. Les formulaires e
 
 ## Studio créatif et carte de visite
 
-Le bouton « Parlons ensemble » ouvre AGL AI et démarre directement la voix. L’IA peut matérialiser : parcours (navigation), corridors, fiches, et espace créatif (`open_studio`, `generate_image`). Le Studio créatif propose 4 onglets : image générée à la demande avec animation, schéma logistique dessiné depuis une description, storyboard avec montage narré et musique d’ambiance, document transformable (schéma, lecture à voix haute, téléchargement). Chaque création propose des liens vers les parcours concernés de la borne.
+Le bouton « Parlons ensemble » ouvre Lara et démarre directement la voix. L’IA peut matérialiser : parcours (navigation), corridors, fiches, et espace créatif (`open_studio`, `generate_image`). Le Studio créatif propose 4 onglets : image générée à la demande avec animation, schéma logistique dessiné depuis une description, storyboard avec montage narré et musique d’ambiance, document transformable (schéma, lecture à voix haute, téléchargement). Chaque création propose des liens vers les parcours concernés de la borne.
 
 « Filmer une carte de visite » (Vision Lab) capture la carte filmée et en lit les coordonnées par reconnaissance visuelle : vérifiez, puis pré-remplissez le rendez-vous ou téléchargez le JSON. Aucun fournisseur secondaire n’est utilisé : une seule clé IA principale.
 

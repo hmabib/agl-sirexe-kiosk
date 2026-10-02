@@ -7,7 +7,7 @@ export interface StudioResult { image: string; text: string; model: string }
 export const STUDIO_LINKS: { screen: Screen; fr: string; en: string }[] = [
   { screen: "mission", fr: "Mission Control", en: "Mission Control" },
   { screen: "mining", fr: "Mining Journey", en: "Mining Journey" },
-  { screen: "explore", fr: "Explore AGL", en: "Explore AGL" },
+  { screen: "explore", fr: "Explore Africa Global Logistics", en: "Explore Africa Global Logistics" },
   { screen: "build", fr: "Build Africa", en: "Build Africa" },
   { screen: "vision", fr: "Vision Lab", en: "Vision Lab" },
   { screen: "appointment", fr: "Rendez-vous", en: "Appointment" },

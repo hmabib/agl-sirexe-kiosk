@@ -23,7 +23,7 @@ export default function DemoPage() {
   const s = STEPS[i];
   return (
     <div className="h-screen w-screen flex flex-col items-center justify-center text-center text-white p-10" style={{ background: "radial-gradient(900px 700px at 50% 30%, #003F73, #00060f)" }}>
-      <div className="text-xs tracking-[0.4em] text-[#D6A84B] font-bold">DÉMO VIP • 75 s • AGL × SIREXE</div>
+      <div className="text-xs tracking-[0.4em] text-[#D6A84B] font-bold">DÉMO VIP • 75 s • AFRICA GLOBAL LOGISTICS × SIREXE</div>
       <motion.div key={i} initial={{ opacity: 0, y: 30, scale: 0.95 }} animate={{ opacity: 1, y: 0, scale: 1 }} className="mt-6">
         <div className="text-[120px]">{s.emoji}</div>
         <h1 className="text-5xl md:text-7xl font-extrabold">{s.title}</h1>

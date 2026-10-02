@@ -17,6 +17,7 @@ import { CorporateScreen } from "./Corporate";
 import { RequestForm } from "./RequestForm";
 import { ExternalExperience } from "./ExternalExperience";
 import { MarketScreen } from "./Market";
+import { CanvasScreen } from "./CanvasScreen";
 import { MaterialHost } from "./MaterialHost";
 import { StudioHost } from "./StudioPanel";
 
@@ -44,7 +45,7 @@ function Shell() {
   useEffect(() => {
     const id = setInterval(() => {
       if (k.screen === "attract") { setIdleLeft(null); return; }
-      const longSession = ["satisfaction", "quotation", "appointment", "careers", "vision"].includes(k.screen);
+      const longSession = ["satisfaction", "quotation", "appointment", "careers", "vision", "canvas"].includes(k.screen);
       const remain = (longSession ? 300 : 90) - (Date.now() - k.lastTouch) / 1000;
       setIdleLeft(remain < 10 && remain > 0 ? Math.ceil(remain) : null);
     }, 1000);
@@ -79,6 +80,7 @@ function Shell() {
             {k.screen === "satisfaction" && <ExternalExperience kind="satisfaction" />}
             {k.screen === "quotation" && <ExternalExperience kind="quotation" />}
             {k.screen === "market" && <MarketScreen />}
+            {k.screen === "canvas" && <CanvasScreen />}
             {k.screen === "mission" && <MissionScreen />}
             {k.screen === "explore" && <ExploreScreen />}
             {k.screen === "build" && <BuildScreen />}

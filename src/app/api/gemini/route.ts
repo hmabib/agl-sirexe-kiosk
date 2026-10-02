@@ -26,7 +26,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(result);
   } catch {
     return NextResponse.json({
-      reply: "AGL AI momentanément indisponible. Les expériences restent accessibles.",
+      reply: "Lara est momentanément indisponible. Les expériences restent accessibles.",
       provider: "mock-error",
       model: "error",
     });

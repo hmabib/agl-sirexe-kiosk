@@ -72,7 +72,7 @@ export function CardScan({ getVideo, onClose }: { getVideo: () => HTMLVideoEleme
       </div>
       {!done && (
         <>
-          <p style={{ color: "#d4dfef", lineHeight: 1.6, marginTop: 8 }}>{en ? "Frame the card in the video, then capture. AGL AI reads the contact details." : "Cadrez la carte dans la vidéo, puis capturez. AGL AI lit les coordonnées."}</p>
+          <p style={{ color: "#d4dfef", lineHeight: 1.6, marginTop: 8 }}>{en ? "Frame the card in the video, then capture. Lara reads the contact details." : "Cadrez la carte dans la vidéo, puis capturez. Lara lit les coordonnées."}</p>
           <div className="button-row">
             <button className="brand-btn" disabled={busy} onClick={capture}><ScanLine size={20} />{busy ? (en ? "Reading…" : "Lecture…") : (en ? "Capture & read" : "Capturer & lire")}</button>
           </div>
@@ -91,7 +91,7 @@ export function CardScan({ getVideo, onClose }: { getVideo: () => HTMLVideoEleme
           </div>
           <div className="button-row">
             <button className="text-action" onClick={retry}><RotateCcw size={16} />{en ? "Scan again" : "Recommencer"}</button>
-            <button className="outline-btn" onClick={() => downloadFile("AGL-carte-visite.json", JSON.stringify({ ...form, scannedAt: new Date().toISOString() }, null, 2), "application/json")}><Download size={18} />JSON</button>
+            <button className="outline-btn" onClick={() => downloadFile("Africa Global Logistics-carte-visite.json", JSON.stringify({ ...form, scannedAt: new Date().toISOString() }, null, 2), "application/json")}><Download size={18} />JSON</button>
             <button className="brand-btn" onClick={useForAppointment}>{en ? "Use for appointment" : "Utiliser pour le rendez-vous"}<ArrowRight size={18} /></button>
           </div>
         </>

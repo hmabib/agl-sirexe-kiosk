@@ -4,8 +4,8 @@ import "leaflet/dist/leaflet.css";
 import "./experience.css";
 
 export const metadata: Metadata = {
-  title: "AGL × SIREXE — Borne Immersive",
-  description: "Connecting Africa. Powering Possibilities. Expérience kiosk AGL Côte d'Ivoire.",
+  title: "Africa Global Logistics × SIREXE — Borne Immersive",
+  description: "Connecting Africa. Powering Possibilities. Expérience kiosk Africa Global Logistics Côte d'Ivoire.",
 };
 
 export const viewport: Viewport = {

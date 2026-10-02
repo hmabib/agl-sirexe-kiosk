@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { X, Image as ImageIcon, Network, Clapperboard, FileText, Download, Play, Square, ArrowUpRight, Sparkles, Volume2 } from "lucide-react";
 import { useKiosk } from "@/lib/store";
+import { logEvent } from "@/lib/store";
 import type { MaterialAction } from "@/lib/actions";
 import { publishAction } from "@/lib/actions";
 import { generateStudioImage, splitScenes, splitSteps, STUDIO_LINKS, type StudioTab } from "@/lib/studio";
@@ -19,7 +20,7 @@ export function StudioHost() {
   useEffect(() => {
     const handle = (e: Event) => {
       const a = (e as CustomEvent<MaterialAction>).detail;
-      if (a.type === "open_studio") setDoc({ tab: a.tab, title: a.title, body: a.body });
+      if (a.type === "open_studio") { setDoc({ tab: a.tab, title: a.title, body: a.body }); logEvent("studio_opened", { tab: a.tab }); }
     };
     window.addEventListener("agl-action", handle);
     return () => window.removeEventListener("agl-action", handle);
@@ -28,7 +29,7 @@ export function StudioHost() {
   return <StudioPanel key={`${doc.tab}-${doc.title}-${doc.body.slice(0, 24)}`} doc={doc} onClose={() => setDoc(null)} />;
 }
 
-const TABS: { id: StudioTab; fr: string; en: string }[] = [
+export const TABS: { id: StudioTab; fr: string; en: string }[] = [
   { id: "image", fr: "Image", en: "Image" },
   { id: "schema", fr: "Schéma", en: "Diagram" },
   { id: "storyboard", fr: "Storyboard", en: "Storyboard" },
@@ -43,7 +44,7 @@ function StudioPanel({ doc, onClose }: { doc: StudioDoc; onClose: () => void }) 
     <div style={{ position: "fixed", inset: 0, background: "#000a", zIndex: 75, display: "grid", placeItems: "center", padding: 24 }}>
       <div className="panel" role="dialog" aria-modal="true" aria-label={doc.title || (en ? "Creative studio" : "Studio créatif")} style={{ width: "min(980px,100%)", maxHeight: "92dvh", overflow: "auto", background: "#14294a" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
-          <div><span className="eyebrow">AGL AI · {en ? "CREATIVE STUDIO" : "STUDIO CRÉATIF"}</span><h3 style={{ margin: 0 }}>{doc.title || (en ? "Creative studio" : "Studio créatif")}</h3></div>
+          <div><span className="eyebrow">Lara · {en ? "CREATIVE STUDIO" : "STUDIO CRÉATIF"}</span><h3 style={{ margin: 0 }}>{doc.title || (en ? "Creative studio" : "Studio créatif")}</h3></div>
           <button className="ai-icon-btn" aria-label={en ? "Close studio" : "Fermer le studio"} onClick={onClose}><X /></button>
         </div>
         <div className="stage-tabs" role="tablist" aria-label={en ? "Studio tabs" : "Onglets du studio"}>
@@ -73,7 +74,7 @@ function StudioPanel({ doc, onClose }: { doc: StudioDoc; onClose: () => void }) 
   );
 }
 
-function ImageTab({ initialPrompt }: { initialPrompt: string }) {
+export function ImageTab({ initialPrompt }: { initialPrompt: string }) {
   const k = useKiosk();
   const en = k.lang === "en";
   const [prompt, setPrompt] = useState(initialPrompt);
@@ -97,7 +98,7 @@ function ImageTab({ initialPrompt }: { initialPrompt: string }) {
       const styled = `${prompt.trim()} (${style === "photorealiste" ? "photorealistic" : style === "schema" ? "clean technical diagram" : style === "aquarelle" ? "watercolor" : "flat infographic illustration"})`;
       const r = await generateStudioImage(styled, k.lang, abort.signal);
       if (abort.signal.aborted) return;
-      setImgUrl(r.image); setImgText(r.text);
+      setImgUrl(r.image); setImgText(r.text); logEvent("image_generated", {});
     } catch {
       if (!abort.signal.aborted) setErr(en ? "Image generation temporarily unavailable." : "Génération d’image momentanément indisponible.");
     } finally {
@@ -142,7 +143,7 @@ function ImageTab({ initialPrompt }: { initialPrompt: string }) {
     if (!cv) return;
     const a = document.createElement("a");
     a.href = cv.toDataURL("image/png");
-    a.download = "AGL-studio-image.png";
+    a.download = "Africa Global Logistics-studio-image.png";
     a.click();
   }
 
@@ -175,7 +176,7 @@ function ImageTab({ initialPrompt }: { initialPrompt: string }) {
   );
 }
 
-function SchemaTab({ initialBody }: { initialBody: string }) {
+export function SchemaTab({ initialBody }: { initialBody: string }) {
   const k = useKiosk();
   const en = k.lang === "en";
   const [body, setBody] = useState(initialBody);
@@ -184,7 +185,7 @@ function SchemaTab({ initialBody }: { initialBody: string }) {
   function download() {
     const svg = document.getElementById("agl-schema-svg")?.outerHTML;
     if (!svg) return;
-    downloadFile("AGL-schema.svg", `<?xml version="1.0" encoding="UTF-8"?>\n${svg}`, "image/svg+xml");
+    downloadFile("Africa Global Logistics-schema.svg", `<?xml version="1.0" encoding="UTF-8"?>\n${svg}`, "image/svg+xml");
   }
   return (
     <div>
@@ -214,7 +215,7 @@ function SchemaTab({ initialBody }: { initialBody: string }) {
   );
 }
 
-function StoryboardTab({ initialBody }: { initialBody: string }) {
+export function StoryboardTab({ initialBody }: { initialBody: string }) {
   const k = useKiosk();
   const en = k.lang === "en";
   const lang = k.lang;
@@ -248,7 +249,7 @@ function StoryboardTab({ initialBody }: { initialBody: string }) {
   return (
     <div>
       <div className="button-row" style={{ marginTop: 0 }}>
-        <button className={`brand-btn ${playing ? "live-on" : ""}`} onClick={() => { k.touch(); if (playing) { setPlaying(false); } else { setSceneIdx(0); setPlaying(true); } }} aria-live="polite">
+        <button className={`brand-btn ${playing ? "live-on" : ""}`} onClick={() => { k.touch(); if (playing) { setPlaying(false); } else { setSceneIdx(0); setPlaying(true); logEvent("storyboard_played", { scenes: scenes.length }); } }} aria-live="polite">
           {playing ? <><Square size={18} /> {en ? "Stop montage" : "Arrêter le montage"}</> : <><Play size={18} /> {en ? "Play montage" : "Lancer le montage"}</>}
         </button>
       </div>
@@ -279,7 +280,7 @@ function StoryboardTab({ initialBody }: { initialBody: string }) {
   );
 }
 
-function DocTab({ initialBody, goSchema }: { initialBody: string; goSchema: (body: string) => void }) {
+export function DocTab({ initialBody, goSchema }: { initialBody: string; goSchema: (body: string) => void }) {
   const k = useKiosk();
   const en = k.lang === "en";
   const [body, setBody] = useState(initialBody);
@@ -298,7 +299,7 @@ function DocTab({ initialBody, goSchema }: { initialBody: string; goSchema: (bod
         <textarea value={body} onChange={e => setBody(e.target.value)} rows={8} maxLength={4000} style={{ border: "1px solid #ffffff2b", background: "#0f203a", minHeight: 180, borderRadius: 12, padding: 14, color: "white", fontSize: 16, lineHeight: 1.6 }} />
       </label>
       <div className="button-row">
-        <button className="outline-btn" disabled={!body.trim()} onClick={() => { downloadFile("AGL-studio-document.txt", body); k.touch(); }}><Download size={18} />TXT</button>
+        <button className="outline-btn" disabled={!body.trim()} onClick={() => { downloadFile("Africa Global Logistics-studio-document.txt", body); k.touch(); }}><Download size={18} />TXT</button>
         <button className="brand-btn" disabled={!body.trim()} onClick={() => goSchema(body)}><Network size={18} />{en ? "Turn into diagram" : "Transformer en schéma"}</button>
         <button className="text-action" disabled={!body.trim()} onClick={toggleRead}><Volume2 size={16} />{reading ? (en ? "Stop narration" : "Arrêter la lecture") : (en ? "Read aloud" : "Lire à voix haute")}</button>
       </div>

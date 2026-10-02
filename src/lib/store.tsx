@@ -1,12 +1,13 @@
 "use client";
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import type { Lang } from "./i18n";
+import { sessionId } from "./analytics";
 import { AGL_SYSTEM_PROMPT } from "./prompt";
 
 export { AGL_SYSTEM_PROMPT };
 
-export type Screen = "attract" | "home" | "games" | "mission" | "explore" | "build" | "vision" | "mining" | "corporate" | "appointment" | "careers" | "quotation" | "satisfaction" | "market" | "finale";
-export const SCREEN_PATHS: Record<Screen, string> = { attract: "/", home: "/accueil", games: "/experiences", mission: "/mission", explore: "/explore", build: "/build", vision: "/vision", mining: "/mining", corporate: "/presentation", appointment: "/rendez-vous", careers: "/emploi", quotation: "/cotation", satisfaction: "/satisfaction", market: "/performance", finale: "/resultats" };
+export type Screen = "attract" | "home" | "games" | "mission" | "explore" | "build" | "vision" | "mining" | "corporate" | "appointment" | "careers" | "quotation" | "satisfaction" | "market" | "canvas" | "finale";
+export const SCREEN_PATHS: Record<Screen, string> = { attract: "/", home: "/accueil", games: "/experiences", mission: "/mission", explore: "/explore", build: "/build", vision: "/vision", mining: "/mining", corporate: "/presentation", appointment: "/rendez-vous", careers: "/emploi", quotation: "/cotation", satisfaction: "/satisfaction", market: "/performance", canvas: "/canvas", finale: "/resultats" };
 
 export interface ExperienceContext {
   experience: string;
@@ -116,7 +117,7 @@ export function KioskProvider({ children, initialScreen = "attract" }: { childre
   // Auto-reset 60s -> confirm -> attract
   useEffect(() => {
     const id = setInterval(() => {
-      const longSession = ["satisfaction", "quotation", "appointment", "careers", "vision"].includes(screenRef.current);
+      const longSession = ["satisfaction", "quotation", "appointment", "careers", "vision", "canvas"].includes(screenRef.current);
       if (screenRef.current !== "attract" && Date.now() - lastTouch > (longSession ? 300000 : 90000)) {
         setScreen("attract");
         setCargo(null); setScenario(null); setRoute(null); setIncident(null);
@@ -204,7 +205,7 @@ export function logEvent(name: string, data: Record<string, unknown>) {
     const raw = localStorage.getItem("agl_analytics") ?? "[]";
     const arr = JSON.parse(raw);
     const { text: _text, ctx: _ctx, context: _context, ...anonymous } = data;
-    arr.push({ name, data: anonymous, ts: new Date().toISOString() });
+    arr.push({ name, data: { ...anonymous, sid: sessionId() }, ts: new Date().toISOString() });
     localStorage.setItem("agl_analytics", JSON.stringify(arr.slice(-500)));
   } catch {}
 }

@@ -50,7 +50,7 @@ export function Orb({ state, size = 120 }: { state: "idle" | "listening" | "thin
           <div className="text-center">
             <div className="text-3xl">◆</div>
             <div className="text-[10px] tracking-[0.3em] font-bold text-white/90 mt-1">
-              {({ listening: "LISTENING", thinking: "THINKING", speaking: "SPEAKING", idle: "AGL AI" } as const)[state]}
+              {({ listening: "LISTENING", thinking: "THINKING", speaking: "SPEAKING", idle: "Lara" } as const)[state]}
             </div>
           </div>
         )}
@@ -79,7 +79,7 @@ export function AglLogo({ size = "md" }: { size?: "sm" | "md" | "lg" }) {
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         src="/assets/template/image6.svg"
-        alt="AGL — Africa Global Logistics"
+        alt="Africa Global Logistics"
         style={{ height: h, width: "auto" }}
         className="object-contain"
         onError={() => setFailed(true)}

@@ -93,7 +93,7 @@ export function BuildScreen() {
                 ⚡ ACTIVER LE CORRIDOR
               </button>
             )}
-            <button onClick={() => k.requestAI(`Analyse mon corridor : ${placed.map(p=>`${p.id} (${p.lat}, ${p.lng})`).join(" → ")}. Quelles sont ses forces et quelles vérifications sont nécessaires ?`)} className="w-full h-14 rounded-2xl bg-white/10 font-bold border border-[#D6A84B]/30">🤖 AGL AI ANALYSE MON CORRIDOR</button>
+            <button onClick={() => k.requestAI(`Analyse mon corridor : ${placed.map(p=>`${p.id} (${p.lat}, ${p.lng})`).join(" → ")}. Quelles sont ses forces et quelles vérifications sont nécessaires ?`)} className="w-full h-14 rounded-2xl bg-white/10 font-bold border border-[#D6A84B]/30">🤖 Lara ANALYSE MON CORRIDOR</button>
             {k.lastAiReply && <div className="rounded-2xl bg-[#003F73]/60 border border-[#D6A84B]/40 p-4 text-sm">🤖 {k.lastAiReply}</div>}
           </div>
         </div>

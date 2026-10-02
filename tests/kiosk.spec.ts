@@ -36,7 +36,7 @@ test("quotation and satisfaction have direct links and QR codes",async({page})=>
 
 test("AI streams history and opens a real route sheet",async({page})=>{
   let calls=0;await page.route("**/api/gemini/stream",async route=>{calls++;const body=route.request().postDataJSON();if(calls===2)expect(body.history.length).toBeGreaterThan(0);await route.fulfill({contentType:"text/event-stream",body:'data: {"t":"Voici le corridor."}\n\ndata: {"done":true,"reply":"Voici le corridor.","provider":"gemini","model":"test-model","actions":[{"type":"show_route","route":"route-B"}]}\n\n'});});await page.route("**/api/tts",r=>r.fulfill({status:503,body:"{}"}));
-  await page.goto("/accueil");await page.getByRole("button",{name:"Ouvrir AGL AI"}).click();await page.getByLabel("Question à AGL AI").fill("Montre le corridor multimodal");await page.getByRole("button",{name:"Envoyer la question"}).click();await expect(page.getByRole("dialog",{name:/Corridor B/})).toBeVisible();await page.getByRole("button",{name:"Fermer la fiche"}).click();await page.getByLabel("Question à AGL AI").fill("Et pourquoi ce trajet ?");await page.getByRole("button",{name:"Envoyer la question"}).click();await expect.poll(()=>calls).toBe(2);
+  await page.goto("/accueil");await page.getByRole("button",{name:"Ouvrir Lara"}).click();await page.getByLabel("Question à Lara").fill("Montre le corridor multimodal");await page.getByRole("button",{name:"Envoyer la question"}).click();await expect(page.getByRole("dialog",{name:/Corridor B/})).toBeVisible();await page.getByRole("button",{name:"Fermer la fiche"}).click();await page.getByLabel("Question à Lara").fill("Et pourquoi ce trajet ?");await page.getByRole("button",{name:"Envoyer la question"}).click();await expect.poll(()=>calls).toBe(2);
 });
 
 test("camera starts, Live errors gracefully and stop releases the device",async({page,context})=>{
@@ -44,7 +44,7 @@ test("camera starts, Live errors gracefully and stop releases the device",async(
 });
 
 test("portrait kiosk remains readable with no horizontal clipping",async({page})=>{
-  await page.setViewportSize({width:768,height:1366});await page.goto("/accueil");await expect(page.getByRole("button",{name:/Jouer & explorer/})).toBeVisible();expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);await page.getByRole("button",{name:/Rejoindre l’aventure/}).click();await expect(page.getByRole("heading",{name:"REJOINDRE L’AVENTURE AGL"})).toBeVisible();expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
+  await page.setViewportSize({width:768,height:1366});await page.goto("/accueil");await expect(page.getByRole("button",{name:/Jouer & explorer/})).toBeVisible();expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);await page.getByRole("button",{name:/Rejoindre l’aventure/}).click();await expect(page.getByRole("heading",{name:"REJOINDRE L’AVENTURE AFRICA GLOBAL LOGISTICS"})).toBeVisible();expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
 });
 
 test("screenshots at landscape and portrait sizes",async({page})=>{
@@ -99,4 +99,11 @@ test("Business card films, reads and prefills the appointment",async({page,conte
   await expect(page.getByLabel("Nom",{exact:true})).toHaveValue("Awa Diallo");
   await page.getByRole("button",{name:/Utiliser pour le rendez-vous/}).click();
   await expect(page).toHaveURL(/rendez-vous$/);await expect(page.getByLabel("Nom et prénom")).toHaveValue("Awa Diallo");await expect(page.getByText("Pré-rempli depuis la carte de visite scannée")).toBeVisible();
+});
+
+test("Canvas Lara generates live in a full page",async({page})=>{
+  await page.route("**/api/studio/image",r=>r.fulfill({status:200,contentType:"application/json",body:JSON.stringify({ok:true,image:"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",text:"ok",model:"test-image"})}));
+  await page.goto("/canvas");await expect(page.getByRole("heading",{name:"CANVAS LARA"})).toBeVisible();
+  await page.getByLabel("Sujet de l’image").fill("Port au lever du soleil");await page.getByRole("button",{name:/Générer l’image/}).click();
+  await expect(page.getByRole("img",{name:"Visuel généré"})).toBeVisible();
 });
