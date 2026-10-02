@@ -5,7 +5,7 @@ import { useKiosk } from "@/lib/store";
 import { logEvent } from "@/lib/store";
 import type { MaterialAction } from "@/lib/actions";
 import { publishAction } from "@/lib/actions";
-import { generateStudioImage, splitScenes, splitSteps, STUDIO_LINKS, type StudioTab } from "@/lib/studio";
+import { aglLogo, drawBrand, generateStudioImage, splitScenes, splitSteps, STUDIO_LINKS, type StudioTab } from "@/lib/studio";
 import { playServerVoice, stopServerVoice } from "@/lib/live";
 import { downloadFile } from "@/lib/requests";
 
@@ -41,8 +41,8 @@ function StudioPanel({ doc, onClose }: { doc: StudioDoc; onClose: () => void }) 
   const en = k.lang === "en";
   const [tab, setTab] = useState<StudioTab>(doc.tab);
   return (
-    <div style={{ position: "fixed", inset: 0, background: "#000a", zIndex: 75, display: "grid", placeItems: "center", padding: 24 }}>
-      <div className="panel" role="dialog" aria-modal="true" aria-label={doc.title || (en ? "Creative studio" : "Studio créatif")} style={{ width: "min(980px,100%)", maxHeight: "92dvh", overflow: "auto", background: "#14294a" }}>
+    <div className="glass-backdrop" style={{ position: "fixed", inset: 0, zIndex: 75, display: "grid", placeItems: "center", padding: 24 }}>
+      <div className="panel glass-surface" role="dialog" aria-modal="true" aria-label={doc.title || (en ? "Creative studio" : "Studio créatif")} style={{ width: "min(980px,100%)", maxHeight: "92dvh", overflow: "auto" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
           <div><span className="eyebrow">Lara · {en ? "CREATIVE STUDIO" : "STUDIO CRÉATIF"}</span><h3 style={{ margin: 0 }}>{doc.title || (en ? "Creative studio" : "Studio créatif")}</h3></div>
           <button className="ai-icon-btn" aria-label={en ? "Close studio" : "Fermer le studio"} onClick={onClose}><X /></button>
@@ -98,7 +98,7 @@ export function ImageTab({ initialPrompt }: { initialPrompt: string }) {
       const styled = `${prompt.trim()} (${style === "photorealiste" ? "photorealistic" : style === "schema" ? "clean technical diagram" : style === "aquarelle" ? "watercolor" : "flat infographic illustration"})`;
       const r = await generateStudioImage(styled, k.lang, abort.signal);
       if (abort.signal.aborted) return;
-      setImgUrl(r.image); setImgText(r.text); logEvent("image_generated", {});
+      setImgUrl(r.raw); setImgText(r.text); logEvent("image_generated", {});
     } catch {
       if (!abort.signal.aborted) setErr(en ? "Image generation temporarily unavailable." : "Génération d’image momentanément indisponible.");
     } finally {
@@ -114,6 +114,8 @@ export function ImageTab({ initialPrompt }: { initialPrompt: string }) {
     if (!cv || !imgUrl) return;
     let raf = 0; let cancelled = false;
     const el = new Image();
+    let logo: HTMLImageElement | null = null;
+    void aglLogo().then(l => { logo = l; });
     el.onload = () => {
       if (cancelled) return;
       const ctx = cv.getContext("2d");
@@ -124,12 +126,14 @@ export function ImageTab({ initialPrompt }: { initialPrompt: string }) {
         const w = el.width * sc, h = el.height * sc;
         ctx.drawImage(el, (W - w) / 2 + dx, (H - h) / 2 + dy, w, h);
       };
-      if (!animate) { cover(1, 0, 0); return; }
+      // Le logo et la charte AGL restent fixes pendant le mouvement de caméra.
+      if (!animate) { cover(1, 0, 0); drawBrand(ctx, W, H, logo); void aglLogo().then(l => { if (!cancelled) { cover(1, 0, 0); drawBrand(ctx, W, H, l); } }); return; }
       const t0 = performance.now();
       const frame = (t: number) => {
         if (cancelled) return;
         const p = ((t - t0) % 12000) / 12000;
         cover(1 + p * 0.18, (p - 0.5) * 60, (p - 0.5) * 30);
+        drawBrand(ctx, W, H, logo);
         raf = requestAnimationFrame(frame);
       };
       raf = requestAnimationFrame(frame);

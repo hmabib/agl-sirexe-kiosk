@@ -44,17 +44,40 @@ export async function getReply(opts:ReplyOptions,onToken?:(text:string)=>void,on
 }
 export async function getModelInfo(){const {provider}=resolveKey();return {provider,configured:provider!=="none",textModel:GEMINI_TEXT_DEFAULT,liveModel:GEMINI_LIVE_MODEL,ttsModel:GEMINI_TTS_MODEL,imageModel:GEMINI_IMAGE_MODEL,knowledge:(await getKnowledge()).length};}
 export interface ImageResult {ok:boolean;image?:string;text?:string;model?:string;message?:string}
+// Charte Africa Global Logistics appliquée à chaque visuel ; le logo officiel est composé ensuite
+// sur la borne (un modèle d’image ne reproduit pas fidèlement un logo).
+const AGL_IMAGE_STYLE="Art direction: premium corporate visual for Africa Global Logistics. Colour palette dominated by deep navy blue (#1B365F) with refined soft gold accents (#EED58E), natural daylight or golden hour, clean modern composition, realistic African logistics context. No text, no letters, no logos, no watermark. Keep the bottom band and bottom-right corner calm and uncluttered.";
+const IMAGE_DEADLINE_MS=55000;
+// Modèles d’image réellement ouverts à la clé, découverts une fois par instance :
+// la génération bascule seule si le modèle configuré est retiré ou non autorisé.
+let discoveredImageModels:Promise<string[]>|null=null;
+function discoverImageModels(ai:GoogleGenAI){
+  discoveredImageModels??=(async()=>{
+    const found:string[]=[];
+    try{const pager=await ai.models.list({config:{pageSize:200}});for await(const m of pager){const name=(m.name??"").replace(/^models\//,"");if(/image/.test(name)&&!/imagen|tts|live/.test(name)&&(m.supportedActions??["generateContent"]).includes("generateContent"))found.push(name);}}
+    catch(e){console.warn("Lara image models unavailable",e instanceof Error?e.message.slice(0,160):"unknown");}
+    // Les plus récents d’abord (versions plus élevées), les « preview » après les stables.
+    return found.sort((a,b)=>Number(a.includes("preview"))-Number(b.includes("preview"))||b.localeCompare(a,undefined,{numeric:true}));
+  })();
+  return discoveredImageModels;
+}
+let workingImageModel:string|null=null;
 export async function getImage(prompt:string,lang?:string):Promise<ImageResult>{
   const unavailable=lang==="en"?"Image generation temporarily unavailable.":"Génération d’image momentanément indisponible.";
   const {key,provider}=resolveKey();if(!key||provider!=="gemini")return {ok:false,message:unavailable};
-  const ai=new GoogleGenAI({apiKey:key});
-  for(const model of [...new Set([GEMINI_IMAGE_MODEL,"gemini-2.0-flash-preview-image-generation"])]){
+  const ai=new GoogleGenAI({apiKey:key});const started=Date.now();
+  const discovery=discoverImageModels(ai);
+  const models=[...new Set([workingImageModel,GEMINI_IMAGE_MODEL,...await discovery,"gemini-2.5-flash-image"].filter(Boolean) as string[])].slice(0,4);
+  for(const [i,model] of models.entries()){
+    // Le modèle principal garde l’essentiel du budget ; le secours utilise le temps restant (maxDuration 60 s).
+    const left=IMAGE_DEADLINE_MS-(Date.now()-started);if(left<8000)break;
+    const timeout=i===models.length-1?left:Math.min(40000,left-8000);
     try{
-      const r=await ai.models.generateContent({model,contents:`${prompt.slice(0,800)}${lang?` (texte éventuel en ${lang==="en"?"anglais":"français"})`:""}`,config:{responseModalities:[Modality.TEXT,Modality.IMAGE],httpOptions:{timeout:60000}}});
+      const r=await ai.models.generateContent({model,contents:`${prompt.slice(0,800)}\n\n${AGL_IMAGE_STYLE}`,config:{responseModalities:[Modality.TEXT,Modality.IMAGE],httpOptions:{timeout}}});
       let image="";let text="";
       for(const p of r.candidates?.[0]?.content?.parts??[]){if(p.inlineData?.data)image=`data:${p.inlineData.mimeType||"image/png"};base64,${p.inlineData.data}`;else if(p.text)text+=p.text;}
-      if(image)return {ok:true,image,text:text.slice(0,600),model};
-    }catch(e){console.warn("Lara image unavailable",model,e instanceof Error?e.name:"unknown");}
+      if(image){workingImageModel=model;return {ok:true,image,text:text.slice(0,600),model};}
+    }catch(e){if(workingImageModel===model)workingImageModel=null;console.warn("Lara image unavailable",model,e instanceof Error?e.message.slice(0,200):"unknown");}
   }
   return {ok:false,message:unavailable};
 }

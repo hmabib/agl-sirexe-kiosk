@@ -5,7 +5,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { X, Download, ArrowRight, ArrowUpRight, Network, RefreshCw, TriangleAlert, Truck, TrainFront, Ship, Plane, Anchor, Warehouse, ShieldCheck, Construction, Pickaxe, Satellite, Users, Sparkles } from "lucide-react";
 import { useKiosk, logEvent, type Screen } from "@/lib/store";
 import { publishAction, type MaterialAction, type RouteId, type StepMode } from "@/lib/actions";
-import { generateStudioImage, STUDIO_LINKS } from "@/lib/studio";
+import { brandImage, generateStudioImage, STUDIO_LINKS } from "@/lib/studio";
 import { downloadFile } from "@/lib/requests";
 import { Orb } from "./Orb";
 import { sfx } from "@/lib/sound";
@@ -46,7 +46,7 @@ export function LiveStage(){
       const id=nextId.current++;const title=titleOf(a);
       // Même titre = Lara affine la solution : la vue est remplacée au lieu d’être empilée.
       setViews(vs=>[...vs.filter(v=>titleOf(v.action)!==title),{id,action:a}].slice(-MAX_VIEWS));setActive(id);
-      if(a.type==="show_image")setImages(m=>({...m,[id]:{status:"ready",src:a.image,text:a.text}}));
+      if(a.type==="show_image"){setImages(m=>({...m,[id]:{status:"ready",src:a.image,text:a.text}}));void brandImage(a.image).then(src=>setImages(m=>({...m,[id]:{status:"ready",src,text:a.text}})));}
       sfx("materialize");logEvent("live_view",{kind:a.type});
     };
     window.addEventListener("agl-action",handle);return()=>window.removeEventListener("agl-action",handle);
@@ -94,8 +94,8 @@ export function LiveStage(){
           {a.type==="show_route"&&<><CinematicMap route={a.route} onSelectRoute={r=>{setRoute(r);setViews(vs=>vs.map(v=>v.id===view.id?{...v,action:{type:"show_route",route:r as RouteId}}:v));}}/><p className="ai-status">{en?"Principle link between real cities. Route and feasibility to be validated by a route survey.":"Liaison de principe entre des villes réelles. Itinéraire et faisabilité à valider par une étude de route."}</p></>}
           {a.type==="sheet"&&<p className="live-summary" style={{whiteSpace:"pre-wrap"}}>{a.body}</p>}
           {prompt||isImage?<section style={{marginTop:a.type==="solution"?22:0}}>
-            {(!img||img.status==="loading")&&<div className="live-skeleton" role="status"><Sparkles size={20}/>{en?"Lara is creating the visual…":"Lara crée le visuel…"}</div>}
-            {img?.status==="ready"&&img.src&&<motion.img initial={{opacity:0,scale:.98}} animate={{opacity:1,scale:1}} src={img.src} alt="Visuel généré" style={{width:"100%",borderRadius:16,display:"block"}}/>}
+            {(!img||img.status==="loading")&&<div className="live-skeleton" role="status"><Sparkles size={20}/><ImageProgress en={en}/></div>}
+            {img?.status==="ready"&&img.src&&<motion.img className="live-reveal" initial={{opacity:0,scale:1.04,filter:"blur(18px)"}} animate={{opacity:1,scale:1,filter:"blur(0px)"}} transition={{duration:.9,ease:[0.22,1,0.36,1]}} src={img.src} alt="Visuel généré" style={{width:"100%",borderRadius:16,display:"block"}}/>}
             {img?.status==="error"&&<div className="live-skeleton error" role="alert">{en?"Visual unavailable right now.":"Visuel momentanément indisponible."}{prompt&&<button className="text-action" onClick={()=>renderImage(view.id,prompt)}><RefreshCw size={16}/>{en?"Retry":"Réessayer"}</button>}</div>}
             {img?.text&&<p className="ai-status" style={{marginTop:8}}>{img.text}</p>}
             <p className="ai-status">{en?"Illustration generated on demand by Lara — indicative visual, not a contractual photo.":"Illustration générée à la demande par Lara — visuel indicatif, pas une photo contractuelle."}</p>
@@ -116,4 +116,12 @@ export function LiveStage(){
       </div>
     </footer>
   </motion.div>;
+}
+
+// Étapes affichées pendant la génération : la vue reste vivante jusqu’au retour de l’API.
+function ImageProgress({en}:{en:boolean}){
+  const steps=en?["Composing the scene…","Applying the AGL brand palette…","Adding the Africa Global Logistics logo…","Final touches…"]:["Composition de la scène…","Application de la charte AGL…","Intégration du logo Africa Global Logistics…","Derniers détails…"];
+  const [i,setI]=useState(0);
+  useEffect(()=>{const id=setInterval(()=>setI(v=>Math.min(v+1,steps.length-1)),3500);return()=>clearInterval(id);},[steps.length]);
+  return <span>{steps[i]}</span>;
 }
