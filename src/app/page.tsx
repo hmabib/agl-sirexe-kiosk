@@ -1,69 +1,123 @@
-import Image from "next/image";
+"use client";
+import { useEffect, useRef, useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
+import { KioskProvider, useKiosk } from "@/lib/store";
+import { AttractScreen } from "@/components/Chrome";
+import { HomeScreen } from "@/components/Home";
+import { MissionScreen } from "@/components/Mission";
+import { ExploreScreen } from "@/components/Explore";
+import { BuildScreen } from "@/components/Build";
+import { FinaleScreen } from "@/components/Finale";
+import { AIAssistant } from "@/components/AIAssistant";
+import { startAmbient } from "@/components/Fx";
 
-export default function Home() {
+interface Ripple { id: number; x: number; y: number }
+
+function Shell() {
+  const k = useKiosk();
+  const [ripples, setRipples] = useState<Ripple[]>([]);
+  const [warp, setWarp] = useState(0);
+  const [idleLeft, setIdleLeft] = useState<number | null>(null);
+  const idRef = useRef(0);
+
+  // fullscreen kiosk + nappe sonore au premier toucher
+  useEffect(() => {
+    const f = () => {
+      try { if (!document.fullscreenElement) document.documentElement.requestFullscreen?.().catch(() => {}); } catch {}
+      startAmbient();
+    };
+    window.addEventListener("pointerdown", f, { once: true });
+    return () => window.removeEventListener("pointerdown", f);
+  }, []);
+
+  // flash cinématique à chaque navigation
+  useEffect(() => {
+    setWarp((w) => w + 1);
+  }, [k.screen]);
+
+  // alerte "Nouvelle expérience ?" 10 s avant reset auto (55 s)
+  useEffect(() => {
+    const id = setInterval(() => {
+      if (k.screen === "attract") { setIdleLeft(null); return; }
+      const remain = 55 - (Date.now() - k.lastTouch) / 1000;
+      setIdleLeft(remain < 10 && remain > 0 ? Math.ceil(remain) : null);
+    }, 1000);
+    return () => clearInterval(id);
+  }, [k.screen, k.lastTouch]);
+
+  function onDown(e: React.PointerEvent) {
+    k.touch();
+    const r = idRef.current++;
+    const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect();
+    setRipples((rs) => [...rs.slice(-6), { id: r, x: e.clientX - rect.left, y: e.clientY - rect.top }]);
+    setTimeout(() => setRipples((rs) => rs.filter((x) => x.id !== r)), 850);
+  }
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
+    <div
+      className="h-full w-full relative overflow-hidden text-white"
+      onPointerDown={onDown}
+      onTouchMove={() => k.touch()}
+      style={{ background: "#000a18" }}
+    >
+      <audio id="kiosk-beep" src="data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAESsAACJWAAACABAAZGF0YQAAAAA=" />
+      <div className="kiosk-zoom h-full w-full origin-top" style={{ transform: `scale(${k.kioskZoom})`, height: `${100 / k.kioskZoom}%`, width: `${100 / k.kioskZoom}%` }}>
+        <AnimatePresence mode="wait">
+          <motion.div key={k.screen} initial={{ opacity: 0, scale: 0.985 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 1.015 }} transition={{ duration: 0.5 }} className="h-full w-full relative">
+            {k.screen === "attract" && <AttractScreen />}
+            {k.screen === "home" && <HomeScreen />}
+            {k.screen === "mission" && <MissionScreen />}
+            {k.screen === "explore" && <ExploreScreen />}
+            {k.screen === "build" && <BuildScreen />}
+            {k.screen === "finale" && <FinaleScreen />}
+          </motion.div>
+        </AnimatePresence>
+      </div>
+
+      {/* flash warp doré à chaque transition */}
+      <motion.div
+        key={warp}
+        initial={{ opacity: 0.55, scale: 1.25 }}
+        animate={{ opacity: 0, scale: 1 }}
+        transition={{ duration: 0.7, ease: "easeOut" }}
+        className="fixed inset-0 z-[55] pointer-events-none"
+        style={{ background: "radial-gradient(600px 400px at 50% 50%, rgba(214,168,75,.5), transparent 70%)" }}
+      />
+
+      {/* ripples tactiles */}
+      {ripples.map((r) => (
+        <motion.span
+          key={r.id}
+          initial={{ opacity: 0.8, scale: 0 }}
+          animate={{ opacity: 0, scale: 1 }}
+          transition={{ duration: 0.8, ease: "easeOut" }}
+          className="fixed z-[56] pointer-events-none rounded-full border-2 border-[#F2D28B]"
+          style={{ left: r.x - 30, top: r.y - 30, width: 60, height: 60 }}
         />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.tsx
-            </code>{" "}
-            file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+      ))}
+
+      {/* alerte idle */}
+      <AnimatePresence>
+        {idleLeft !== null && (
+          <motion.button
+            initial={{ y: 80, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 80, opacity: 0 }}
+            onClick={() => { k.touch(); setIdleLeft(null); }}
+            className="fixed bottom-24 left-1/2 -translate-x-1/2 z-[57] glass rounded-full px-8 h-16 font-bold text-lg"
           >
-            <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
+            👆 Nouvelle expérience ? Touchez pour continuer • {idleLeft}s
+          </motion.button>
+        )}
+      </AnimatePresence>
+
+      {k.screen !== "attract" && <AIAssistant />}
     </div>
+  );
+}
+
+export default function Page() {
+  return (
+    <KioskProvider>
+      <Shell />
+    </KioskProvider>
   );
 }

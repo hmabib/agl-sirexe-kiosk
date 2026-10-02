@@ -1,36 +1,51 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# AGL × SIREXE — Borne immersive kiosk
 
-## Getting Started
+Expérience tactile premium (Next.js + Tailwind + Framer Motion + SVG + Gemini/Mistral Live).
 
-First, run the development server:
+## Lancement
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
+cp .env.example .env.local   # renseignez GEMINI_API_KEY (ou clé Mistral AQ.…)
+npm run dev                   # http://localhost:3000
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Variables d'environnement
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+| Var | Rôle |
+|---|---|
+| `GEMINI_API_KEY` | Clé Gemini **ou** Mistral (auto-détectée si `AQ.…`). Jamais exposée : utilisée uniquement dans `/api/gemini` côté serveur. |
+| `GEMINI_MODEL` | Dernier modèle texte : `gemini-3.8-flash` (GA sept. 2026, 1M ctx, thinking LOW). Fallback auto → `gemini-3.7-flash` → `gemini-2.5-flash`. |
+| `GEMINI_LIVE_MODEL` | Voix temps réel : `gemini-3.8-live` (natif audio, barge-in, 24 langues, transcription). |
+| `GEMINI_TTS_MODEL` | Voix studio serveur `/api/tts` (`gemini-3.8-flash-tts`, repli navigateur si 503). |
+| `NEXT_PUBLIC_ADMIN_PW` | Mot de passe `/admin` (défaut `agl2026`). |
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+> ⚠️ `gemini-2.0-flash` est **éteint depuis juin 2026**, `mistral-medium-2505/2508` sont **dépréciés** → la borne utilise désormais `gemini-3.8-flash` + `mistral-medium-latest` avec chaînes de repli automatiques.
 
-## Learn More
+La clé fournie (`AQ.Ab8RN6Ip…`) est une clé **Mistral** : collez-la dans `GEMINI_API_KEY`, l'API route la détecte et appelle Mistral automatiquement. Pour Gemini Live temps réel, ajoutez une clé `AIza…` et `GEMINI_MODEL=gemini-live-2.5-flash`.
 
-To learn more about Next.js, take a look at the following resources:
+## Parcours borne
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+- `/` — attract (particules dorées canvas, 45–55 s idle → reset) → accueil → Mission Control / Explore / Build → finale + lead.
+- `/demo` — autoplay VIP 75 s (mine → 80 t → incident → multimodal → port → navire).
+- `/admin` — config (modèle, idle, toggles) + analytics anonymes.
+- Logo : remplacez `public/assets/agl-logo.svg` par `agl-logo.png` officiel (le composant accepte les deux).
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Kiosk
 
-## Deploy on Vercel
+- Plein écran auto au premier toucher, scrollbars masquées, zones tactiles ≥ 64 px, zoom kiosque 100–140 % (bouton ⤢), zoom +/- sur chaque carte SVG, pinch via trackpad.
+- FR/EN, 🔊 toggle, micro flottant + 👁️ ASK WHAT YOU SEE (contexte écran envoyé à l'IA), caméra OFF par défaut (opt-in), orb LISTENING/THINKING/SPEAKING.
+- **Streaming SSE** (`/api/gemini/stream`) : réponse écrite mot-à-mot + voix studio serveur (`/api/tts`, repli local). Badge modèle branché visible (TopBar + assistant + admin).
+- **WOW** : champ de particules, confettis dorés, anneau de score corridor/mission, comparatif animé A/B/C, live feed corridor, sound design WebAudio + nappe d'ambiance, **globe 3D temps réel** (Three.js, ports + arcs animés, point CI cliquable), ripples tactiles, flash warp entre écrans, alerte idle « Touchez pour continuer », bandeau KPI compteurs, chrono mission, moteur de calcul cargaison×scénario×route×incident, final Build en révélation séquentielle.
+- Offline partiel : sans clé, l'IA répond en mode mock « AGL AI momentanément indisponible », les 3 expériences restent jouables.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Build / Vercel
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```bash
+npm run build && npm start
+```
+Déployez sur Vercel, renseignez les env vars dans le dashboard. `knowledge/` : ajoutez vos .md AGL (V2 : injection RAG dans le system prompt).
+
+## Micro / caméra
+
+Navigateur : autoriser micro + caméra (HTTPS ou localhost). Voix : SpeechRecognition + synthèse vocale ; streaming texte via `/api/gemini`.

@@ -1,0 +1,71 @@
+"use client";
+
+export interface StreamResult { reply: string; provider: string; model: string; error?: string | null }
+
+// Streaming SSE mot-à-mot : onToken reçoit le texte cumulé.
+export async function askStream(
+  payload: { message: string; context?: unknown; image?: string; lang?: string; model?: string },
+  onToken: (full: string) => void
+): Promise<StreamResult> {
+  const res = await fetch("/api/gemini/stream", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok || !res.body) throw new Error("stream failed");
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let full = "";
+  let meta: StreamResult = { reply: "", provider: "?", model: "?" };
+  let buf = "";
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buf += decoder.decode(value, { stream: true });
+    const parts = buf.split("\n\n");
+    buf = parts.pop() ?? "";
+    for (const p of parts) {
+      const line = p.trim().replace(/^data:\s*/, "");
+      if (!line) continue;
+      try {
+        const j = JSON.parse(line);
+        if (j.t) { full += j.t; onToken(full); }
+        if (j.done) meta = { reply: full, provider: j.provider, model: j.model, error: j.error };
+      } catch { /* ignore */ }
+    }
+  }
+  meta.reply = full;
+  return meta;
+}
+
+// Tente la voix studio serveur, sinon false -> synthèse locale.
+export async function playServerVoice(text: string, lang: string): Promise<boolean> {
+  try {
+    const r = await fetch("/api/tts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: text.slice(0, 500), lang }),
+    });
+    if (!r.ok) return false;
+    const j = await r.json();
+    if (!j.ok || !j.audio) return false;
+    await new Promise<void>((resolve) => {
+      const a = new Audio(j.audio);
+      a.onended = () => resolve();
+      a.onerror = () => resolve();
+      a.play().catch(() => resolve());
+      setTimeout(resolve, 30000);
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function preferredModel(): string | undefined {
+  try {
+    return localStorage.getItem("agl_model") || undefined;
+  } catch {
+    return undefined;
+  }
+}
