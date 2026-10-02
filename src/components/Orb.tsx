@@ -1,4 +1,5 @@
 "use client";
+import { useState } from "react";
 import { motion } from "framer-motion";
 
 export function Orb({ state, size = 120 }: { state: "idle" | "listening" | "thinking" | "speaking"; size?: number }) {
@@ -60,25 +61,29 @@ export function Orb({ state, size = 120 }: { state: "idle" | "listening" | "thin
 }
 
 export function AglLogo({ size = "md" }: { size?: "sm" | "md" | "lg" }) {
-  const h = size === "lg" ? 72 : size === "md" ? 52 : 36;
-  return (
-    <div className="flex items-center gap-3">
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        src="/assets/agl-logo.svg"
-        alt="AGL"
-        style={{ height: h }}
-        className="object-contain"
-        onError={(e) => {
-          (e.target as HTMLImageElement).style.display = "none";
-        }}
-      />
+  // Lockup officiel AGL (extrait aglgroup.com) — ratio 300:165
+  const h = size === "lg" ? 88 : size === "md" ? 62 : 44;
+  const [failed, setFailed] = useState(false);
+  if (failed) {
+    return (
       <div className="leading-none">
         <div className="font-extrabold tracking-[0.25em] text-white" style={{ fontSize: h * 0.42 }}>
           AGL
         </div>
         <div className="text-[10px] tracking-[0.3em] text-[#D6A84B] font-semibold">AFRICA GLOBAL LOGISTICS</div>
       </div>
+    );
+  }
+  return (
+    <div className="flex items-center gap-3">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src="/assets/agl-logo.svg"
+        alt="AGL — Africa Global Logistics"
+        style={{ height: h, width: "auto" }}
+        className="object-contain"
+        onError={() => setFailed(true)}
+      />
     </div>
   );
 }

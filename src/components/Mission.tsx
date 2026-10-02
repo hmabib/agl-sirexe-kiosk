@@ -147,7 +147,7 @@ export function MissionScreen() {
           <div className="grid md:grid-cols-2 gap-6">
             <div className="glass rounded-3xl p-4">
               <div className="flex items-center justify-between px-2 py-1">
-                <span className="font-bold text-[#F2D28B]">CÔTE D’IVOIRE • 3D stylisée</span>
+                <span className="font-bold text-[#F2D28B]">CÔTE D’IVOIRE • carte réelle • 17 villes</span>
                 <span className="text-xs text-white/50">tap • pinch • zoom</span>
               </div>
               <Zoomable>

@@ -1,5 +1,6 @@
 "use client";
-// Stylised Africa + Côte d'Ivoire SVG maps with glowing corridors
+// Stylised Africa + Côte d'Ivoire maps (CI : contour géographique réel) with glowing corridors
+import { CITIES, COUNTRY_PATH, CIV_VIEWBOX, ROUTES } from "./civData";
 
 export function AfricaCorridors({ active = true }: { active?: boolean }) {
   return (
@@ -61,14 +62,7 @@ export function AfricaCorridors({ active = true }: { active?: boolean }) {
   );
 }
 
-export interface CivRouteDef {
-  id: string;
-  label: string;
-  d: string;
-  modes: string[];
-}
-
-// Stylised Côte d'Ivoire with cities, ports, rail, roads
+// Côte d'Ivoire — contour réel + villes réelles + rail réel, corridors lumineux
 export function CivMap({
   selectedRoute,
   onSelectRoute,
@@ -82,13 +76,22 @@ export function CivMap({
   corridorNodes?: string[];
   zoom?: number;
 }) {
-  const routes: CivRouteDef[] = [
-    { id: "route-A", label: "Corridor Route A — Abidjan → Nord (Road)", d: "M360 400 C 340 330, 300 280, 260 210 C 230 160, 210 120, 195 80", modes: ["road"] },
-    { id: "route-B", label: "Corridor Multimodal B — Abidjan → Rail → Nord", d: "M360 400 C 320 350, 280 300, 250 240 C 225 190, 205 130, 195 80", modes: ["road", "rail"] },
-    { id: "route-C", label: "Corridor Ouest C — San Pedro → Mine", d: "M120 380 C 150 300, 175 220, 195 140", modes: ["road", "port"] },
+  const cityByName = Object.fromEntries(CITIES.map((c) => [c.name, c]));
+  const routeDefs = [
+    { id: "route-A", label: "Corridor Route A — Abidjan → Nord (Route)", modes: ["road"] },
+    { id: "route-B", label: "Corridor Multimodal B — Abidjan → Rail → Nord", modes: ["road", "rail"] },
+    { id: "route-C", label: "Corridor Ouest C — San Pedro → Man", modes: ["road", "port"] },
   ];
+  const routePath = (id: string) =>
+    smoothPath((ROUTES[id] ?? []).map((n) => cityByName[n]).filter(Boolean));
+  // rail réel : Abidjan → Agboville → Dimbokro → Bouaké → Katiola → Ferkessédougou
+  const railPath = smoothPath(
+    ["Abidjan", "Agboville", "Dimbokro", "Bouaké", "Katiola", "Ferkessédougou"]
+      .map((n) => cityByName[n]).filter(Boolean)
+  );
+  const incidentCity = cityByName["Bouaké"];
   return (
-    <svg viewBox="0 0 480 480" className="w-full h-full transition-transform duration-500" style={{ transform: `scale(${zoom})` }}>
+    <svg viewBox={CIV_VIEWBOX} className="w-full h-full transition-transform duration-500" style={{ transform: `scale(${zoom})` }}>
       <defs>
         <linearGradient id="civFill" x1="0" y1="0" x2="1" y2="1">
           <stop offset="0%" stopColor="#0a2f5c" />
@@ -99,22 +102,21 @@ export function CivMap({
           <feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge>
         </filter>
       </defs>
-      {/* CI shape (stylised) */}
-      <path
-        d="M80 300 L110 180 L170 120 L300 90 L400 130 L420 260 L380 400 L220 430 L100 380 Z"
-        fill="url(#civFill)"
-        stroke="#2f6cb0"
-        strokeWidth="2.5"
-      />
-      {/* rail line */}
-      <path d="M360 400 L330 300 L290 200 L250 120" stroke="#7fb3e8" strokeWidth="2" strokeDasharray="8 6" opacity=".7" />
-      {/* routes */}
-      {routes.map((r) => {
+      {/* Côte d'Ivoire — contour géographique réel (fond GADM simplifié) */}
+      <path d={COUNTRY_PATH} fill="url(#civFill)" stroke="#2f6cb0" strokeWidth="2.5" />
+      <text x={240} y={466} textAnchor="middle" fill="#5b87b8" fontSize="11" letterSpacing="4">
+        CÔTE D’IVOIRE
+      </text>
+      {/* rail réel */}
+      <path d={railPath} stroke="#7fb3e8" strokeWidth="2" strokeDasharray="8 6" opacity=".7" fill="none" />
+      {/* corridors */}
+      {routeDefs.map((r) => {
         const active = selectedRoute === r.id;
+        const d = routePath(r.id);
         return (
           <g key={r.id} onClick={() => onSelectRoute?.(r.id)} style={{ cursor: "pointer" }} filter={active ? "url(#civGlow)" : undefined}>
             <path
-              d={r.d}
+              d={d}
               fill="none"
               stroke={active ? "#F2D28B" : "#3a6ea5"}
               strokeWidth={active ? 6 : 4}
@@ -123,24 +125,30 @@ export function CivMap({
               strokeLinecap="round"
             />
             {/* invisible hit area */}
-            <path d={r.d} fill="none" stroke="transparent" strokeWidth="26" />
+            <path d={d} fill="none" stroke="transparent" strokeWidth="26" />
           </g>
         );
       })}
-      {/* cities & ports */}
-      <City x={360} y={400} label="ABIDJAN ⚓" hub />
-      <City x={120} y={380} label="SAN PEDRO ⚓" hub />
-      <City x={195} y={80} label="MINE NORD ⛏️" gold={corridorNodes.includes("MINE")} />
-      <City x={250} y={240} label="HUB BOUAKÉ" gold={corridorNodes.includes("LOGISTICS HUB")} />
-      <City x={290} y={300} label="YAMOUSSOUKRO" />
+      {/* villes réelles */}
+      {CITIES.map((c) => (
+        <City
+          key={c.name}
+          x={c.x}
+          y={c.y}
+          label={c.kind === "port" ? `${c.name.toUpperCase()} ⚓` : c.kind === "mine" ? `${c.name.toUpperCase()} ⛏️` : c.kind === "hub" ? `HUB ${c.name.toUpperCase()}` : c.name}
+          hub={c.kind === "port" || c.kind === "hub"}
+          gold={c.kind === "mine" ? corridorNodes.includes("MINE") || undefined : c.kind === "hub" ? corridorNodes.includes("LOGISTICS HUB") || undefined : undefined}
+          minor={c.kind === "city"}
+        />
+      ))}
       {incidentZone && (
         <g>
-          <circle cx={260} cy={210} r="22" fill="rgba(255,60,60,.25)" stroke="#ff5a5a" strokeWidth="2" strokeDasharray="6 4" />
-          <text x={260} y={215} textAnchor="middle" fontSize="20">⚠️</text>
+          <circle cx={incidentCity.x} cy={incidentCity.y - 34} r="22" fill="rgba(255,60,60,.25)" stroke="#ff5a5a" strokeWidth="2" strokeDasharray="6 4" />
+          <text x={incidentCity.x} y={incidentCity.y - 28} textAnchor="middle" fontSize="20">⚠️</text>
         </g>
       )}
       {corridorNodes.length > 0 && (
-        <text x={240} y={460} textAnchor="middle" fill="#F2D28B" fontSize="13" fontWeight="700">
+        <text x={240} y={448} textAnchor="middle" fill="#F2D28B" fontSize="12" fontWeight="700">
           {corridorNodes.join("  →  ")}
         </text>
       )}
@@ -148,7 +156,16 @@ export function CivMap({
   );
 }
 
-function City({ x, y, label, hub, gold }: { x: number; y: number; label: string; hub?: boolean; gold?: boolean }) {
+function City({ x, y, label, hub, gold, minor }: { x: number; y: number; label: string; hub?: boolean; gold?: boolean | undefined; minor?: boolean }) {
+  if (minor)
+    return (
+      <g opacity={0.85}>
+        <circle cx={x} cy={y} r={3.5} fill="#0a2242" stroke="#7fb3e8" strokeWidth={1.5} />
+        <text x={x} y={y - 8} textAnchor="middle" fill="#9dc0e8" fontSize={9} fontWeight={600}>
+          {label}
+        </text>
+      </g>
+    );
   return (
     <g>
       <circle cx={x} cy={y} r={hub ? 11 : 7} fill={gold ? "#D6A84B" : "#0a2242"} stroke={gold || hub ? "#F2D28B" : "#7fb3e8"} strokeWidth="2.5" />
@@ -157,6 +174,19 @@ function City({ x, y, label, hub, gold }: { x: number; y: number; label: string;
       </text>
     </g>
   );
+}
+
+// Courbe lisse (Catmull-Rom → Bézier) à travers les villes
+function smoothPath(pts: { x: number; y: number }[]) {
+  if (pts.length < 2) return "";
+  let d = `M${pts[0].x} ${pts[0].y}`;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const p0 = pts[Math.max(0, i - 1)], p1 = pts[i], p2 = pts[i + 1], p3 = pts[Math.min(pts.length - 1, i + 2)];
+    const c1x = p1.x + (p2.x - p0.x) / 6, c1y = p1.y + (p2.y - p0.y) / 6;
+    const c2x = p2.x - (p3.x - p1.x) / 6, c2y = p2.y - (p3.y - p1.y) / 6;
+    d += ` C${c1x.toFixed(1)} ${c1y.toFixed(1)}, ${c2x.toFixed(1)} ${c2y.toFixed(1)}, ${p2.x} ${p2.y}`;
+  }
+  return d;
 }
 
 export function WestAfricaMap({
