@@ -14,7 +14,7 @@ npm run dev                   # http://localhost:3000
 
 | Var | Rôle |
 |---|---|
-| `GEMINI_API_KEY` | Clé Gemini **ou** Mistral (auto-détectée si `AQ.…`). Jamais exposée : utilisée uniquement dans `/api/gemini` côté serveur. |
+| `GEMINI_API_KEY` | Clé Gemini (format `AIza…` **ou** `AQ.…`, les deux acceptés). Jamais exposée : utilisée uniquement dans `/api/gemini` côté serveur (query `?key=` + header `X-goog-api-key`). |
 | `GEMINI_MODEL` | Dernier modèle texte : `gemini-3.8-flash` (GA sept. 2026, 1M ctx, thinking LOW). Fallback auto → `gemini-3.7-flash` → `gemini-2.5-flash`. |
 | `GEMINI_LIVE_MODEL` | Voix temps réel : `gemini-3.8-live` (natif audio, barge-in, 24 langues, transcription). |
 | `GEMINI_TTS_MODEL` | Voix studio serveur `/api/tts` (`gemini-3.8-flash-tts`, repli navigateur si 503). |

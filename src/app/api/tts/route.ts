@@ -9,14 +9,15 @@ export const dynamic = "force-dynamic";
 export async function POST(req: NextRequest) {
   try {
     const { text, lang } = await req.json();
-    const key = process.env.GEMINI_API_KEY ?? "";
-    if (!key || !key.startsWith("AIza")) return NextResponse.json({ ok: false }, { status: 503 });
+    const { resolveKey } = await import("@/lib/ai-server");
+    const { key, provider } = resolveKey();
+    if (!key || provider !== "gemini") return NextResponse.json({ ok: false }, { status: 503 });
     const models = [GEMINI_TTS_MODEL, "gemini-2.5-flash-preview-tts"];
     for (const m of [...new Set(models)]) {
       try {
         const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent?key=${key}`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", "X-goog-api-key": key },
           body: JSON.stringify({
             contents: [{ parts: [{ text: `Dis avec une voix chaleureuse et professionnelle (${lang === "en" ? "anglais" : "français"}): ${(text as string).slice(0, 500)}` }] }],
             generationConfig: {

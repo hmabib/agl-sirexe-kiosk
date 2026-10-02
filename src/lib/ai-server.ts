@@ -4,7 +4,7 @@ import { AGL_SYSTEM_PROMPT } from "@/lib/prompt";
 
 // ---- Derniers modèles (vérifié oct. 2026) ----
 export const GEMINI_TEXT_DEFAULT = process.env.GEMINI_MODEL || "gemini-3.8-flash";
-export const GEMINI_FALLBACKS = ["gemini-3.8-flash", "gemini-3.7-flash", "gemini-2.5-flash"];
+export const GEMINI_FALLBACKS = ["gemini-3.8-flash", "gemini-3.7-flash"];
 export const GEMINI_LIVE_MODEL = process.env.GEMINI_LIVE_MODEL || "gemini-3.8-live";
 export const GEMINI_TTS_MODEL = process.env.GEMINI_TTS_MODEL || "gemini-3.8-flash-tts";
 export const MISTRAL_DEFAULT = "mistral-medium-latest";
@@ -14,10 +14,16 @@ export type Provider = "gemini" | "mistral" | "mock-offline" | "mock-fallback";
 
 export function detectProvider(key: string): "gemini" | "mistral" | "none" {
   if (!key) return "none";
-  if (key.startsWith("AIza")) return "gemini";
-  if (key.startsWith("AQ.")) return "mistral";
-  // heuristique : les clés Mistral font ~80+ chars, Gemini ~39
-  return key.length > 50 ? "mistral" : "gemini";
+  // Mistral uniquement si la clé vient explicitement de MISTRAL_API_KEY.
+  // Les clés Gemini existent en 2 formats : AIza (legacy) et AQ. (nouveau format Auth Key).
+  if (process.env.MISTRAL_API_KEY && key === process.env.MISTRAL_API_KEY) return "mistral";
+  return "gemini";
+}
+
+export function resolveKey(): { key: string; provider: "gemini" | "mistral" | "none" } {
+  if (process.env.MISTRAL_API_KEY) return { key: process.env.MISTRAL_API_KEY, provider: "mistral" };
+  const key = process.env.GEMINI_API_KEY ?? "";
+  return { key, provider: detectProvider(key) };
 }
 
 let knowledgeCache: string | null = null;
@@ -53,22 +59,34 @@ async function callGemini(key: string, model: string, message: string, context: 
     const b64 = image.includes(",") ? image.split(",")[1] : image;
     parts.push({ inline_data: { mime_type: "image/jpeg", data: b64.slice(0, 1500000) } });
   }
-  const isNewGen = /gemini-3\.[678]/.test(model);
   const body: any = {
     contents: [{ parts }],
     generationConfig: { maxOutputTokens: 400, temperature: 0.6 },
   };
-  if (isNewGen) body.generationConfig.thinkingConfig = { thinkingLevel: "LOW" }; // latence kiosk
-  const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  if (!r.ok) throw new Error(`gemini:${model}:${r.status}:${(await r.text()).slice(0, 200)}`);
-  const j = await r.json();
-  const reply = j.candidates?.[0]?.content?.parts?.map((p: any) => p.text ?? "").join("");
-  if (!reply) throw new Error(`gemini:${model}:empty`);
-  return reply as string;
+  // Retry anti-saturation (503/429 passagers) avant de changer de modèle
+  let lastErr = "";
+  for (let attempt = 0; attempt < 3; attempt++) {
+    if (attempt > 0) await new Promise((r) => setTimeout(r, 700 * attempt));
+    const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-goog-api-key": key, // les clés AQ. exigent parfois le header plutôt que ?key=
+      },
+      body: JSON.stringify(body),
+    });
+    if (r.ok) {
+      const j = await r.json();
+      const reply = j.candidates?.[0]?.content?.parts?.map((p: any) => p.text ?? "").join("");
+      if (reply) return reply as string;
+      lastErr = `gemini:${model}:empty`;
+      break; // réponse vide = inutile de réessayer
+    }
+    lastErr = `gemini:${model}:${r.status}:${(await r.text()).slice(0, 200)}`;
+    console.error(lastErr.slice(0, 300));
+    if (!/^(429|500|502|503)/.test(String(r.status))) break; // erreur dure = changer de modèle
+  }
+  throw new Error(lastErr);
 }
 
 async function callMistral(key: string, model: string, message: string, context: unknown, lang: string, image?: string) {
@@ -100,9 +118,8 @@ export async function getReply(opts: {
   message: string; context?: unknown; image?: string; lang?: string; modelOverride?: string;
 }): Promise<ReplyResult> {
   const { message, context, image, lang = "fr", modelOverride } = opts;
-  const key = process.env.GEMINI_API_KEY ?? process.env.MISTRAL_API_KEY ?? "";
+  const { key, provider } = resolveKey();
   if (!key) return { reply: mockReply(message, context), provider: "mock-offline", model: "offline" };
-  const provider = detectProvider(key);
 
   if (provider === "mistral") {
     const chain = [modelOverride, ...MISTRAL_FALLBACKS].filter(Boolean) as string[];
@@ -128,8 +145,8 @@ export async function getReply(opts: {
 }
 
 export function getModelInfo() {
-  const key = process.env.GEMINI_API_KEY ?? process.env.MISTRAL_API_KEY ?? "";
-  const provider = detectProvider(key);
+  const { key, provider } = resolveKey();
+  void key;
   return {
     provider,
     connected: provider !== "none",
