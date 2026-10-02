@@ -1,14 +1,16 @@
 import { GoogleGenAI, Modality, type LiveConnectConfig } from "@google/genai";
-import { GEMINI_LIVE_MODEL, resolveKey, getKnowledge } from "@/lib/ai-server";
+import { GEMINI_LIVE_MODEL, OPENAI_REALTIME_MODEL, resolveKey, getKnowledge } from "@/lib/ai-server";
 import { AGL_SYSTEM_PROMPT, VISION_VOICE_PROMPT } from "@/lib/prompt";
-import { LIVE_TOOLS } from "@/lib/ai-tools";
+import { LIVE_TOOLS, REALTIME_TOOLS } from "@/lib/ai-tools";
 // Kore : voix féminine Gemini ; l’accent français est imposé par les instructions.
 const LARA_VOICE="Kore";
 export const runtime="nodejs";
 export const maxDuration=30;
 export async function POST(req:Request){
   try {
-    const body=await req.json(); const {key,provider}=resolveKey();
+    const body=await req.json();
+    if(body.provider==="openai")return openaiSession(body);
+    const {key,provider}=resolveKey();
     if(!key||provider!=="gemini")return Response.json({message:"Conversation vocale indisponible. Utilisez le mode texte."},{status:503});
     // Poignée de reprise fournie par le serveur Live : reconnexion sans perdre la conversation.
     const resume=typeof body.resume==="string"&&/^[\w\-./+=:]{1,1024}$/.test(body.resume)?body.resume:undefined;
@@ -18,4 +20,17 @@ export async function POST(req:Request){
     if(!token.name)throw new Error("Missing token");
     return Response.json({token:token.name,model:GEMINI_LIVE_MODEL,config},{headers:{"Cache-Control":"no-store"}});
   }catch(e){console.warn("Live token unavailable",e instanceof Error?e.name:"unknown");return Response.json({message:"La conversation Live est momentanément indisponible. Le mode texte et l’analyse d’image restent disponibles."},{status:503});}
+}
+
+// Secours temps réel OpenAI : jeton éphémère (10 min) pour une session WebRTC, mêmes consignes et outils.
+async function openaiSession(body:{lang?:string;context?:unknown}){
+  const k=(process.env.OPENAI_API_KEY||"").trim();
+  if(!k)return Response.json({message:"Conversation vocale indisponible. Utilisez le mode texte."},{status:503});
+  try{
+    const instructions=`${AGL_SYSTEM_PROMPT}\n${VISION_VOICE_PROMPT}\nLangue de l’écran : ${body.lang==="en"?"anglais":"français"}. Par défaut, parle français de France avec une voix de femme ; passe à l’anglais seulement si le visiteur parle anglais.\nContexte écran initial : ${JSON.stringify(body.context??{}).slice(0,8000)}\nDocumentation Africa Global Logistics : ${(await getKnowledge()).slice(0,18000)}`;
+    const r=await fetch("https://api.openai.com/v1/realtime/client_secrets",{method:"POST",headers:{Authorization:`Bearer ${k}`,"Content-Type":"application/json"},signal:AbortSignal.timeout(15000),body:JSON.stringify({expires_after:{anchor:"created_at",seconds:600},session:{type:"realtime",model:OPENAI_REALTIME_MODEL,instructions,tools:REALTIME_TOOLS,tool_choice:"auto",audio:{input:{transcription:{model:"gpt-4o-mini-transcribe"},turn_detection:{type:"semantic_vad"}},output:{voice:"marin"}}}})});
+    const j=await r.json().catch(()=>({}));
+    if(!r.ok||typeof j.value!=="string"){console.warn("Lara realtime backup unavailable",r.status,String(j?.error?.message??"").slice(0,200));return Response.json({message:"La conversation vocale est momentanément indisponible. Le mode texte reste disponible."},{status:503});}
+    return Response.json({provider:"openai",token:j.value},{headers:{"Cache-Control":"no-store"}});
+  }catch(e){console.warn("Lara realtime backup unavailable",e instanceof Error?e.message:"unknown");return Response.json({message:"La conversation vocale est momentanément indisponible. Le mode texte reste disponible."},{status:503});}
 }

@@ -25,3 +25,14 @@ export const LIVE_TOOLS: FunctionDeclaration[] = [
   ...AGL_TOOLS,
   { name:"get_screen_context",description:"Lit l’état actuel de la borne : écran ouvert, cargaison, corridor, étape, vue affichée. À appeler quand le visiteur parle de « ça », « ici », « cet écran » ou après une navigation.",parameters:{type:Type.OBJECT,properties:{}}},
 ];
+
+// Mêmes outils au format JSON Schema pour le secours OpenAI (texte et temps réel).
+function toJsonSchema(s:unknown):unknown{
+  if(Array.isArray(s))return s.map(toJsonSchema);
+  if(!s||typeof s!=="object")return s;
+  const out:Record<string,unknown>={};
+  for(const [k,v] of Object.entries(s))out[k]=k==="type"&&typeof v==="string"?v.toLowerCase():toJsonSchema(v);
+  return out;
+}
+export const REALTIME_TOOLS=LIVE_TOOLS.map(t=>({type:"function",name:t.name,description:t.description,parameters:toJsonSchema(t.parameters??{type:"OBJECT",properties:{}})}));
+export const OPENAI_TOOLS=AGL_TOOLS.map(t=>({type:"function",function:{name:t.name,description:t.description,parameters:toJsonSchema(t.parameters)}}));

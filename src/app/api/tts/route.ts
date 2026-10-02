@@ -32,9 +32,22 @@ export async function POST(req: NextRequest) {
         if (data) {
           const pcm=Buffer.from(data,"base64"); const header=Buffer.alloc(44);
           header.write("RIFF",0);header.writeUInt32LE(pcm.length+36,4);header.write("WAVEfmt ",8);header.writeUInt32LE(16,16);header.writeUInt16LE(1,20);header.writeUInt16LE(1,22);header.writeUInt32LE(24000,24);header.writeUInt32LE(48000,28);header.writeUInt16LE(2,32);header.writeUInt16LE(16,34);header.write("data",36);header.writeUInt32LE(pcm.length,40);
-          return NextResponse.json({ ok: true, model: m, audio: `data:audio/wav;base64,${Buffer.concat([header,pcm]).toString("base64")}` });
+          return NextResponse.json({ ok: true, audio: `data:audio/wav;base64,${Buffer.concat([header,pcm]).toString("base64")}` });
         }
       } catch { /* try next */ }
+    }
+    // Secours OpenAI : même rendu (voix féminine française), modèle léger.
+    const openai = (process.env.OPENAI_API_KEY || "").trim();
+    if (openai) {
+      try {
+        const r = await fetch("https://api.openai.com/v1/audio/speech", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${openai}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ model: process.env.OPENAI_TTS_MODEL || "gpt-4o-mini-tts", voice: "marin", input: (text as string).slice(0, 500), response_format: "mp3", instructions: lang === "en" ? "Warm, professional female voice, English with a light French accent." : "Voix de femme française, chaleureuse et professionnelle, français de France, accent standard." }),
+          signal: AbortSignal.timeout(20000),
+        });
+        if (r.ok) return NextResponse.json({ ok: true, audio: `data:audio/mpeg;base64,${Buffer.from(await r.arrayBuffer()).toString("base64")}` });
+      } catch { /* indisponible */ }
     }
     return NextResponse.json({ ok: false }, { status: 503 });
   } catch {

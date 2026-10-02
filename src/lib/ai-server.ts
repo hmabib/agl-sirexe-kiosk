@@ -3,13 +3,15 @@ import path from "path";
 import { GoogleGenAI, Modality, type Content, type Part } from "@google/genai";
 import { AGL_SYSTEM_PROMPT, VISION_VOICE_PROMPT } from "./prompt";
 import { KNOWLEDGE_FACTS } from "./content";
-import { AGL_TOOLS } from "./ai-tools";
+import { AGL_TOOLS, OPENAI_TOOLS } from "./ai-tools";
 import { parseToolAction, type MaterialAction } from "./actions";
 
 export const GEMINI_TEXT_DEFAULT=process.env.GEMINI_MODEL||"gemini-3.8-flash";
 export const GEMINI_FALLBACKS=[GEMINI_TEXT_DEFAULT,"gemini-flash-latest"];
 export const GEMINI_LIVE_MODEL=process.env.GEMINI_LIVE_MODEL||"gemini-3.8-live";
 export const GEMINI_TTS_MODEL=process.env.GEMINI_TTS_MODEL||"gemini-3.8-flash-tts";
+export const OPENAI_TEXT_MODEL=process.env.OPENAI_TEXT_MODEL||"gpt-5.4-mini";
+export const OPENAI_REALTIME_MODEL=process.env.OPENAI_REALTIME_MODEL||"gpt-realtime-2.1-mini";
 export const GEMINI_IMAGE_MODEL=process.env.GEMINI_IMAGE_MODEL||"gemini-2.5-flash-image";
 export function resolveKey(){const key=(process.env.GEMINI_API_KEY||"").trim();return {key,provider:key?"gemini":"none"};}
 let knowledgeCache:string|null=null;
@@ -21,16 +23,19 @@ export interface ReplyResult {reply:string;provider:string;model:string;actions:
 function unavailable(lang?:string):ReplyResult{return {reply:lang==="en"?"Lara is temporarily unavailable. You can still explore Mining, display a corridor or prepare an appointment using the kiosk.":"Lara est momentanément indisponible. Vous pouvez continuer à explorer le Mining, afficher un corridor ou préparer un rendez-vous depuis la borne.",provider:"offline",model:"offline",actions:[],degraded:true};}
 
 export async function getReply(opts:ReplyOptions,onToken?:(text:string)=>void,onAction?:(action:MaterialAction)=>void):Promise<ReplyResult>{
-  const {key}=resolveKey();if(!key){const result=unavailable(opts.lang);onToken?.(result.reply);return result;}
+  const {key}=resolveKey();
   const history:Content[]=(Array.isArray(opts.history)?opts.history:[]).slice(-12).filter(t=>(t.role==="user"||t.role==="ai")&&typeof t.text==="string").map(t=>({role:t.role==="ai"?"model":"user",parts:[{text:t.text.slice(0,2500)}]}));
   const parts:Part[]=[{text:`Langue de l’écran : ${opts.lang??"fr"}\nContexte écran : ${JSON.stringify(opts.context??{}).slice(0,9000)}\nDemande du visiteur : ${opts.message.slice(0,4000)}`}];
   if(opts.image&&/^data:image\/(jpeg|png);base64,/.test(opts.image)&&opts.image.length<2000000){const [prefix,data]=opts.image.split(",");parts.push({inlineData:{mimeType:prefix.includes("png")?"image/png":"image/jpeg",data}});}
   const system=AGL_SYSTEM_PROMPT+(opts.voice?"\n"+VISION_VOICE_PROMPT:"")+"\n\nDOCUMENTATION AFRICA GLOBAL LOGISTICS :\n"+await getKnowledge();
 
+  // Gemini d’abord ; sans quota il est mis de côté et le secours OpenAI répond directement.
+  if(key&&!cooling("gemini-text")){
+  let quota=0,tried=0;
   const ai=new GoogleGenAI({apiKey:key});
   const requested=opts.modelOverride&&/^gemini-[a-z0-9.\-]+$/.test(opts.modelOverride)&&!opts.modelOverride.includes("live")&&!opts.modelOverride.includes("tts")?opts.modelOverride:undefined;
   for(const model of [...new Set([requested,...GEMINI_FALLBACKS].filter(Boolean) as string[])]){
-    let emitted=false;
+    let emitted=false;tried++;
     try {
       const config={systemInstruction:system,maxOutputTokens:opts.deepThink?4000:1800,tools:[{functionDeclarations:AGL_TOOLS}],httpOptions:{timeout:25000},...(opts.deepThink?{thinkingConfig:{thinkingBudget:2048}}:{})};
       let reply="";const actions:MaterialAction[]=[];
@@ -38,9 +43,43 @@ export async function getReply(opts:ReplyOptions,onToken?:(text:string)=>void,on
       for await(const chunk of stream){const text=chunk.candidates?.[0]?.content?.parts?.filter(p=>p.text&&!p.thought).map(p=>p.text).join("")??"";if(text){reply+=text;onToken?.(text);emitted=true;}for(const call of chunk.functionCalls??[]){const action=parseToolAction(call.name,call.args);if(action){actions.push(action);onAction?.(action);}}}
       if(!reply&&actions.length){reply=opts.lang==="en"?"I’m opening the requested view for you.":"J’ouvre la vue demandée pour vous.";onToken?.(reply);}
       if(reply)return {reply,provider:"gemini",model,actions};
-    } catch(e){console.warn("Lara upstream unavailable",model,e instanceof Error?e.name:"unknown");if(emitted)return {reply:opts.lang==="en"?"The connection was interrupted. Please try again.":"La connexion a été interrompue. Réessayez dans un instant.",provider:"gemini",model,actions:[],degraded:true};}
+    } catch(e){const msg=e instanceof Error?e.message:"";if(isQuota(0,msg))quota++;console.warn("Lara upstream unavailable",model,e instanceof Error?`${e.name} ${msg.slice(0,200)}`:"unknown");if(emitted)return {reply:opts.lang==="en"?"The connection was interrupted. Please try again.":"La connexion a été interrompue. Réessayez dans un instant.",provider:"gemini",model,actions:[],degraded:true};}
   }
+  if(quota&&quota===tried)cooldown.set("gemini-text",Date.now()+COOLDOWN_MS);
+  }
+  const backup=await openaiReply(opts,system,onToken,onAction);
+  if(backup)return backup;
   const result=unavailable(opts.lang);onToken?.(result.reply);return result;
+}
+
+// Secours OpenAI (même outils, même consignes, réponse en flux) quand Gemini est indisponible.
+async function openaiReply(opts:ReplyOptions,system:string,onToken?:(text:string)=>void,onAction?:(action:MaterialAction)=>void):Promise<ReplyResult|null>{
+  const k=(process.env.OPENAI_API_KEY||"").trim();if(!k||cooling("openai-text"))return null;
+  const text=`Langue de l’écran : ${opts.lang??"fr"}\nContexte écran : ${JSON.stringify(opts.context??{}).slice(0,9000)}\nDemande du visiteur : ${opts.message.slice(0,4000)}`;
+  const image=opts.image&&/^data:image\/(jpeg|png);base64,/.test(opts.image)&&opts.image.length<2000000?opts.image:undefined;
+  const messages=[{role:"system",content:system},...(Array.isArray(opts.history)?opts.history:[]).slice(-12).filter(t=>typeof t.text==="string").map(t=>({role:t.role==="ai"?"assistant":"user",content:t.text.slice(0,2500)})),{role:"user",content:image?[{type:"text",text},{type:"image_url",image_url:{url:image}}]:text}];
+  let emitted=false;
+  try{
+    const r=await fetch("https://api.openai.com/v1/chat/completions",{method:"POST",headers:{Authorization:`Bearer ${k}`,"Content-Type":"application/json"},body:JSON.stringify({model:OPENAI_TEXT_MODEL,messages,tools:OPENAI_TOOLS,stream:true,max_completion_tokens:opts.deepThink?4000:1800,...(opts.deepThink?{reasoning_effort:"medium"}:{})}),signal:AbortSignal.timeout(30000)});
+    if(!r.ok||!r.body){const j=await r.json().catch(()=>({}));const msg=j?.error?.message??"";if(isQuota(r.status,msg))cooldown.set("openai-text",Date.now()+COOLDOWN_MS);console.warn("Lara backup unavailable",r.status,msg.slice(0,200));return null;}
+    const reader=r.body.getReader();const dec=new TextDecoder();let buf="";let reply="";
+    const calls:Record<number,{name:string;args:string}>={};
+    for(;;){
+      const {done,value}=await reader.read();if(done)break;
+      buf+=dec.decode(value,{stream:true});const lines=buf.split("\n");buf=lines.pop()??"";
+      for(const line of lines){
+        const data=line.replace(/^data:\s*/,"").trim();if(!data||data==="[DONE]"||!line.startsWith("data:"))continue;
+        try{const d=JSON.parse(data).choices?.[0]?.delta;if(!d)continue;
+          if(d.content){reply+=d.content;onToken?.(d.content);emitted=true;}
+          for(const c of d.tool_calls??[]){const slot=calls[c.index]??={name:"",args:""};if(c.function?.name)slot.name+=c.function.name;if(c.function?.arguments)slot.args+=c.function.arguments;}
+        }catch{/* fragment incomplet */}
+      }
+    }
+    const actions:MaterialAction[]=[];
+    for(const c of Object.values(calls)){try{const action=parseToolAction(c.name,JSON.parse(c.args||"{}"));if(action){actions.push(action);onAction?.(action);}}catch{/* arguments invalides */}}
+    if(!reply&&actions.length){reply=opts.lang==="en"?"I’m opening the requested view for you.":"J’ouvre la vue demandée pour vous.";onToken?.(reply);}
+    return reply?{reply,provider:"openai",model:OPENAI_TEXT_MODEL,actions}:null;
+  }catch(e){console.warn("Lara backup unavailable",e instanceof Error?e.message.slice(0,200):"unknown");return emitted?{reply:opts.lang==="en"?"The connection was interrupted. Please try again.":"La connexion a été interrompue. Réessayez dans un instant.",provider:"openai",model:OPENAI_TEXT_MODEL,actions:[],degraded:true}:null;}
 }
 export async function getModelInfo(){const {provider}=resolveKey();return {provider,configured:provider!=="none",textModel:GEMINI_TEXT_DEFAULT,liveModel:GEMINI_LIVE_MODEL,ttsModel:GEMINI_TTS_MODEL,imageModel:GEMINI_IMAGE_MODEL,knowledge:(await getKnowledge()).length};}
 export interface ImageResult {ok:boolean;image?:string;text?:string;model?:string;message?:string}
@@ -67,6 +106,7 @@ function discoverImageModels(ai:GoogleGenAI){
 // est mis de côté 10 minutes pour ne pas faire attendre le visiteur.
 const cooldown=new Map<string,number>();
 const COOLDOWN_MS=10*60*1000;
+const cooling=(id:string)=>(cooldown.get(id)??0)>Date.now();
 class QuotaError extends Error{}
 const isQuota=(status:number,msg:string)=>status===429||status===402||/quota|credit|billing|insufficient/i.test(msg);
 type Provider={id:string;run:(prompt:string,timeout:number)=>Promise<string>};

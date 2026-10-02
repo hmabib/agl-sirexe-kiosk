@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Session, LiveConnectConfig, LiveServerMessage } from "@google/genai";
 import { describeAction, parseToolAction, publishAction } from "./actions";
+import { connectOpenAIRealtime, type RealtimeSession } from "./openai-realtime";
 
 export type LivePhase="idle"|"connecting"|"listening"|"thinking"|"speaking";
 export const LIVE_PHASE_LABEL:Record<LivePhase,{fr:string;en:string}>={
@@ -13,6 +14,11 @@ export const LIVE_PHASE_LABEL:Record<LivePhase,{fr:string;en:string}>={
 };
 const FALLBACK_ERROR={fr:"Conversation vocale momentanément indisponible. Le mode texte reste disponible.",en:"Voice conversation temporarily unavailable. Text mode remains available."};
 const MAX_RECONNECTS=3;
+const GREETING="(Consigne interne, ne la lis pas.) Accueille le visiteur en une phrase, en le vouvoyant : présente-toi comme Lara, guide Africa Global Logistics, et dis que ce qu’il demande s’affichera à l’écran.";
+// Si la voix principale tombe (quota, coupure à l’ouverture), le secours est utilisé directement pendant 10 min.
+const BACKUP_KEY="agl_live_backup_until";
+const backupFirst=()=>{try{return Number(sessionStorage.getItem(BACKUP_KEY)??0)>Date.now();}catch{return false;}};
+const preferBackup=()=>{try{sessionStorage.setItem(BACKUP_KEY,String(Date.now()+10*60*1000));}catch{/* stockage indisponible */}};
 interface LiveOptions { getContext:()=>unknown; lang:string; video?:()=>HTMLVideoElement|null; onUser?:(text:string)=>void; onReply?:(text:string,done:boolean)=>void; onActivity?:()=>void; }
 
 function toBase64(buffer:ArrayBuffer){
@@ -26,22 +32,24 @@ export function useLiveVoice(opts:LiveOptions){
   const options=useRef(opts);useEffect(()=>{options.current=opts;});
   const session=useRef<Session|null>(null);const input=useRef<AudioContext|null>(null);const output=useRef<AudioContext|null>(null);const mic=useRef<MediaStream|null>(null);const worklet=useRef<AudioWorkletNode|null>(null);const timers=useRef<ReturnType<typeof setInterval>[]>([]);const sources=useRef(new Set<AudioBufferSourceNode>());const nextTime=useRef(0);const reply=useRef("");const user=useRef("");const alive=useRef(false);const generation=useRef(0);const levelRef=useRef(0);
   // Une connexion = un identifiant : les rappels d’une session remplacée sont ignorés.
-  const connection=useRef(0);const resumeHandle=useRef<string|undefined>(undefined);const reconnects=useRef(0);const reconnectRef=useRef<()=>void>(()=>{});
+  const connection=useRef(0);const resumeHandle=useRef<string|undefined>(undefined);const reconnects=useRef(0);const reconnectRef=useRef<()=>void>(()=>{});const rt=useRef<RealtimeSession|null>(null);const hadTurn=useRef(false);
   const lang=()=>options.current.lang==="en"?"en":"fr";
   const stopAudio=useCallback(()=>{for(const s of sources.current)try{s.stop();}catch{}sources.current.clear();nextTime.current=0;},[]);
-  const stop=useCallback(()=>{alive.current=false;generation.current++;connection.current++;resumeHandle.current=undefined;reconnects.current=0;try{session.current?.sendRealtimeInput({audioStreamEnd:true});}catch{}session.current?.close();session.current=null;timers.current.forEach(clearInterval);timers.current=[];worklet.current?.disconnect();worklet.current=null;mic.current?.getTracks().forEach(t=>t.stop());mic.current=null;if(input.current){input.current.close().catch(()=>{});input.current=null;}stopAudio();if(output.current){output.current.close().catch(()=>{});output.current=null;}levelRef.current=0;setPhase("idle");setLevel(0);},[stopAudio]);
-  const interrupt=useCallback(()=>{stopAudio();if(session.current)setPhase("listening");},[stopAudio]);
+  const stop=useCallback(()=>{alive.current=false;rt.current?.close();rt.current=null;hadTurn.current=false;generation.current++;connection.current++;resumeHandle.current=undefined;reconnects.current=0;try{session.current?.sendRealtimeInput({audioStreamEnd:true});}catch{}session.current?.close();session.current=null;timers.current.forEach(clearInterval);timers.current=[];worklet.current?.disconnect();worklet.current=null;mic.current?.getTracks().forEach(t=>t.stop());mic.current=null;if(input.current){input.current.close().catch(()=>{});input.current=null;}stopAudio();if(output.current){output.current.close().catch(()=>{});output.current=null;}levelRef.current=0;setPhase("idle");setLevel(0);},[stopAudio]);
+  const interrupt=useCallback(()=>{stopAudio();rt.current?.interrupt();if(session.current||rt.current)setPhase("listening");},[stopAudio]);
 
-  const handleToolCall=useCallback((m:LiveServerMessage)=>{
-    const responses=(m.toolCall?.functionCalls??[]).map(call=>{
-      if(call.name==="get_screen_context")return {id:call.id,name:call.name,response:{context:options.current.getContext()}};
-      const action=parseToolAction(call.name,call.args);
-      if(!action)return {id:call.id,name:call.name,response:{ok:false,error:"Arguments invalides : rien n’a été affiché."}};
-      publishAction(action);options.current.onActivity?.();
-      return {id:call.id,name:call.name,response:{ok:true,displayed:describeAction(action)}};
-    });
-    if(responses.length)try{session.current?.sendToolResponse({functionResponses:responses});}catch{}
+  // Même exécution des outils pour la voix principale et pour le secours.
+  const runTool=useCallback((name?:string,args?:Record<string,unknown>)=>{
+    if(name==="get_screen_context")return {context:options.current.getContext()};
+    const action=parseToolAction(name,args);
+    if(!action)return {ok:false,error:"Arguments invalides : rien n’a été affiché."};
+    publishAction(action);options.current.onActivity?.();
+    return {ok:true,displayed:describeAction(action)};
   },[]);
+  const handleToolCall=useCallback((m:LiveServerMessage)=>{
+    const responses=(m.toolCall?.functionCalls??[]).map(call=>({id:call.id,name:call.name,response:runTool(call.name,call.args)}));
+    if(responses.length)try{session.current?.sendToolResponse({functionResponses:responses});}catch{}
+  },[runTool]);
 
   const receive=useCallback((m:LiveServerMessage)=>{
     if(!alive.current)return;const c=m.serverContent;
@@ -49,8 +57,8 @@ export function useLiveVoice(opts:LiveOptions){
     if(c?.interrupted){stopAudio();reply.current="";setPhase("listening");}
     if(c?.inputTranscription?.text){if(user.current==="")reply.current="";user.current+=c.inputTranscription.text;options.current.onUser?.(user.current);options.current.onActivity?.();setPhase("thinking");}
     if(c?.outputTranscription?.text){reply.current+=c.outputTranscription.text;options.current.onReply?.(reply.current,false);}
-    for(const p of c?.modelTurn?.parts??[]){if(p.inlineData?.data&&p.inlineData.mimeType?.startsWith("audio/pcm")){const ac=output.current;if(!ac)continue;const bytes=Uint8Array.from(atob(p.inlineData.data),ch=>ch.charCodeAt(0));const pcm=new DataView(bytes.buffer);const buffer=ac.createBuffer(1,Math.floor(bytes.length/2),24000);const samples=buffer.getChannelData(0);for(let i=0;i<samples.length;i++)samples[i]=pcm.getInt16(i*2,true)/32768;const source=ac.createBufferSource();source.buffer=buffer;source.connect(ac.destination);const start=Math.max(ac.currentTime+.02,nextTime.current);source.start(start);nextTime.current=start+buffer.duration;sources.current.add(source);source.onended=()=>{sources.current.delete(source);if(sources.current.size===0&&alive.current)setPhase("listening");};setPhase("speaking");}}
-    if(c?.turnComplete){options.current.onReply?.(reply.current,true);user.current="";reply.current="";reconnects.current=0;if(sources.current.size===0)setPhase("listening");}
+    for(const p of c?.modelTurn?.parts??[]){if(p.inlineData?.data&&p.inlineData.mimeType?.startsWith("audio/pcm")){const ac=output.current;if(!ac)continue;const bytes=Uint8Array.from(atob(p.inlineData.data),ch=>ch.charCodeAt(0));const pcm=new DataView(bytes.buffer);const buffer=ac.createBuffer(1,Math.floor(bytes.length/2),24000);const samples=buffer.getChannelData(0);for(let i=0;i<samples.length;i++)samples[i]=pcm.getInt16(i*2,true)/32768;const source=ac.createBufferSource();source.buffer=buffer;source.connect(ac.destination);const start=Math.max(ac.currentTime+.02,nextTime.current);source.start(start);nextTime.current=start+buffer.duration;hadTurn.current=true;sources.current.add(source);source.onended=()=>{sources.current.delete(source);if(sources.current.size===0&&alive.current)setPhase("listening");};setPhase("speaking");}}
+    if(c?.turnComplete){hadTurn.current=true;options.current.onReply?.(reply.current,true);user.current="";reply.current="";reconnects.current=0;if(sources.current.size===0)setPhase("listening");}
     if(m.toolCall?.functionCalls)handleToolCall(m);
     // Fin de session annoncée : on enchaîne sur une nouvelle connexion avec la poignée de reprise.
     if(m.goAway)reconnectRef.current();
@@ -76,15 +84,46 @@ export function useLiveVoice(opts:LiveOptions){
     setModel(j.model);return connected;
   },[receive]);
 
+  // Secours temps réel : WebRTC, même micro, mêmes outils et consignes.
+  const startBackup=useCallback(async(attempt:number,stream:MediaStream)=>{
+    const r=await fetch("/api/live/token",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({provider:"openai",lang:options.current.lang,context:options.current.getContext()})});
+    let j:{token?:string;message?:string}={};try{j=await r.json();}catch{}
+    if(!r.ok||!j.token)throw new Error(j.message||FALLBACK_ERROR[lang()]);
+    if(!alive.current||generation.current!==attempt)return;
+    user.current="";reply.current="";
+    const session=await connectOpenAIRealtime(j.token,stream,GREETING,{
+      onUserSpeech:()=>{user.current="";reply.current="";setPhase("listening");},
+      onUserDelta:d=>{user.current+=d;options.current.onUser?.(user.current);options.current.onActivity?.();setPhase("thinking");},
+      onReplyDelta:d=>{reply.current+=d;options.current.onReply?.(reply.current,false);},
+      onSpeaking:on=>{if(alive.current)setPhase(on?"speaking":"listening");},
+      onTurnDone:()=>{options.current.onReply?.(reply.current,true);user.current="";reply.current="";},
+      onToolCall:(name,args)=>runTool(name,args),
+      onClose:()=>{if(alive.current&&generation.current===attempt)fail(attempt,lang()==="en"?"Conversation ended. You can restart it.":"Conversation terminée. Vous pouvez la relancer.");},
+    });
+    if(!alive.current||generation.current!==attempt){session.close();return;}
+    rt.current=session;
+    // Niveau micro pour l’orbe (le flux audio part directement en WebRTC).
+    const ac=input.current;if(ac){const an=ac.createAnalyser();an.fftSize=512;ac.createMediaStreamSource(stream).connect(an);const buf=new Uint8Array(an.fftSize);timers.current.push(setInterval(()=>{an.getByteTimeDomainData(buf);let p=0;for(const v of buf)p+=(v-128)**2;setLevel(Math.min(1,Math.sqrt(p/buf.length)/40));},200));}
+    setModel("");setPhase("listening");
+  },[runTool,fail]);
+  const switchToBackup=useCallback(async(attempt:number)=>{
+    const stream=mic.current;if(!stream)return false;
+    preferBackup();connection.current++;const old=session.current;session.current=null;try{old?.close();}catch{}
+    worklet.current?.disconnect();worklet.current=null;stopAudio();setPhase("connecting");
+    try{await startBackup(attempt,stream);return true;}catch(e){fail(attempt,e instanceof Error&&e.message?e.message:FALLBACK_ERROR[lang()]);return true;}
+  },[startBackup,stopAudio,fail]);
+
   const reconnect=useCallback(async()=>{
     const attempt=generation.current;const handle=resumeHandle.current;
     if(!alive.current)return;
+    // Coupure avant tout échange (quota épuisé, refus) : bascule sur le secours au lieu d’échouer.
+    if(!hadTurn.current&&!handle&&!rt.current&&await switchToBackup(attempt))return;
     if(!handle||reconnects.current>=MAX_RECONNECTS){fail(attempt,lang()==="en"?"Voice connection interrupted. Try again or use text.":"La connexion vocale a été interrompue. Réessayez ou utilisez le texte.");return;}
     reconnects.current++;connection.current++;const old=session.current;session.current=null;try{old?.close();}catch{}
     stopAudio();setPhase("connecting");
     try{const next=await connect(attempt,handle);if(!next)return;session.current=next;setPhase("listening");}
     catch(e){fail(attempt,e instanceof Error&&e.message?e.message:FALLBACK_ERROR[lang()]);}
-  },[connect,fail,stopAudio]);
+  },[connect,fail,stopAudio,switchToBackup]);
   useEffect(()=>{reconnectRef.current=()=>{void reconnect();};},[reconnect]);
 
   const start=useCallback(async ()=>{
@@ -93,21 +132,25 @@ export function useLiveVoice(opts:LiveOptions){
     try {
       input.current=new AudioContext();output.current=new AudioContext({sampleRate:24000});await Promise.all([input.current.resume(),output.current.resume()]);if(!alive.current||generation.current!==attempt)return false;
       // Micro et jeton en parallèle : la connexion démarre plus vite.
-      const [stream,connected]=await Promise.all([navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true},video:false}),connect(attempt)]);
-      if(!alive.current||generation.current!==attempt||!connected){stream.getTracks().forEach(t=>t.stop());connected?.close();return false;}
-      mic.current=stream;session.current=connected;
+      // Voix principale, sauf si elle vient d’échouer ; sinon secours temps réel avec le même micro.
+      let primaryFailed=backupFirst();
+      const [stream,connected]=await Promise.all([navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true},video:false}),primaryFailed?Promise.resolve(null):connect(attempt).catch(e=>{console.warn("Voix principale indisponible",e instanceof Error?e.message:e);primaryFailed=true;return null;})]);
+      if(!alive.current||generation.current!==attempt){stream.getTracks().forEach(t=>t.stop());connected?.close();return false;}
+      mic.current=stream;
+      if(!connected){if(!primaryFailed)return false;if(!backupFirst())preferBackup();await startBackup(attempt,stream);return true;}
+      session.current=connected;
       const ac=input.current;if(!ac)return fail(attempt,FALLBACK_ERROR[lang()]);await ac.audioWorklet.addModule("/audio/pcm-worklet.js");if(!alive.current||generation.current!==attempt)return false;const node=new AudioWorkletNode(ac,"agl-pcm-input");worklet.current=node;
       node.port.onmessage=(e:MessageEvent<ArrayBuffer>)=>{if(!session.current||!alive.current)return;let power=0;const pcm=new Int16Array(e.data);for(const v of pcm)power+=v*v;levelRef.current=Math.min(1,Math.sqrt(power/pcm.length)/10000);try{session.current.sendRealtimeInput({audio:{data:toBase64(e.data),mimeType:"audio/pcm;rate=16000"}});}catch{}};
       const source=ac.createMediaStreamSource(stream);source.connect(node);const mute=ac.createGain();mute.gain.value=0;node.connect(mute);mute.connect(ac.destination);
       timers.current.push(setInterval(()=>{setLevel(levelRef.current);levelRef.current*=0.5;},200));
       timers.current.push(setInterval(()=>{const v=options.current.video?.();if(v&&v.readyState>=2&&session.current){const cv=document.createElement("canvas");cv.width=640;cv.height=Math.round(640*v.videoHeight/v.videoWidth);cv.getContext("2d")?.drawImage(v,0,0,cv.width,cv.height);try{session.current.sendRealtimeInput({video:{data:cv.toDataURL("image/jpeg",.65).split(",")[1],mimeType:"image/jpeg"}});}catch{}}},1200));
-      setPhase("listening");try{session.current.sendClientContent({turns:[{role:"user",parts:[{text:"Salue brièvement le visiteur et indique que tu es à son écoute : chaque instruction s’affichera à l’écran. La caméra n’est visible que si des images arrivent."}]}],turnComplete:true});}catch{}return true;
+      setPhase("listening");try{session.current.sendClientContent({turns:[{role:"user",parts:[{text:GREETING}]}],turnComplete:true});}catch{}return true;
     }catch(e){
       // Erreurs navigateur (micro refusé, non pris en charge) : message lisible plutôt que le texte technique.
       if(e instanceof DOMException)return fail(attempt,e.name==="NotAllowedError"?(lang()==="en"?"Microphone access was refused. Allow it or use text.":"L’accès au micro a été refusé. Autorisez-le ou utilisez le texte."):FALLBACK_ERROR[lang()]);
       return fail(attempt,e instanceof Error&&e.message?e.message:FALLBACK_ERROR[lang()]);
     }
-  },[connect,fail,stop]);
+  },[connect,fail,stop,startBackup]);
   useEffect(()=>()=>stop(),[stop]);
   return {phase,error,model,level,start,stop,interrupt,active:phase!=="idle"};
 }
