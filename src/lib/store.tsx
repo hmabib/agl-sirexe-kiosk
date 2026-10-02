@@ -5,7 +5,7 @@ import { AGL_SYSTEM_PROMPT } from "./prompt";
 
 export { AGL_SYSTEM_PROMPT };
 
-export type Screen = "attract" | "home" | "mission" | "explore" | "build" | "finale";
+export type Screen = "attract" | "home" | "mission" | "explore" | "build" | "vision" | "finale";
 
 export interface ExperienceContext {
   experience: string;

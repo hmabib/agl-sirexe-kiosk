@@ -8,8 +8,11 @@ import { MissionScreen } from "@/components/Mission";
 import { ExploreScreen } from "@/components/Explore";
 import { BuildScreen } from "@/components/Build";
 import { FinaleScreen } from "@/components/Finale";
+import dynamic from "next/dynamic";
 import { AIAssistant } from "@/components/AIAssistant";
 import { startAmbient } from "@/components/Fx";
+
+const VisionLab = dynamic(() => import("@/components/VisionLab").then((m) => m.VisionLab), { ssr: false });
 
 interface Ripple { id: number; x: number; y: number }
 
@@ -69,6 +72,7 @@ function Shell() {
             {k.screen === "mission" && <MissionScreen />}
             {k.screen === "explore" && <ExploreScreen />}
             {k.screen === "build" && <BuildScreen />}
+            {k.screen === "vision" && <VisionLab />}
             {k.screen === "finale" && <FinaleScreen />}
           </motion.div>
         </AnimatePresence>

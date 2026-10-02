@@ -3,8 +3,13 @@ import { useEffect, useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useKiosk, logEvent } from "@/lib/store";
 import { TopBar } from "./Chrome";
-import { CivMap } from "./Maps";
+import dynamic from "next/dynamic";
 import { ConfettiBurst, ParticleField, ScoreRing, sfx } from "./Fx";
+
+const RealCivMap = dynamic(() => import("./RealMaps").then((m) => m.RealCivMap), {
+  ssr: false,
+  loading: () => <div className="h-[420px] flex items-center justify-center text-[#D6A84B] animate-pulse">🗺️ Chargement de la vraie carte…</div>,
+});
 
 const CARGOS = [
   { id: "minerai", icon: "🪨", fr: "MINERAI", en: "ORE" },
@@ -147,12 +152,10 @@ export function MissionScreen() {
           <div className="grid md:grid-cols-2 gap-6">
             <div className="glass rounded-3xl p-4">
               <div className="flex items-center justify-between px-2 py-1">
-                <span className="font-bold text-[#F2D28B]">CÔTE D’IVOIRE • carte réelle • 17 villes</span>
+                <span className="font-bold text-[#F2D28B]">CÔTE D’IVOIRE • vraie carte • 17 villes réelles</span>
                 <span className="text-xs text-white/50">tap • pinch • zoom</span>
               </div>
-              <Zoomable>
-                <CivMap selectedRoute={k.route} onSelectRoute={(r) => { k.setRoute(r); k.touch(); }} incidentZone={k.incident} />
-              </Zoomable>
+              <RealCivMap selectedRoute={k.route} onSelectRoute={(r) => { k.setRoute(r); k.touch(); sfx("select"); }} incidentZone={k.incident} corridorNodes={k.corridor} />
               <div className="grid grid-cols-3 gap-2 mt-3">
                 {(["route-A", "route-B", "route-C"] as const).map((r) => (
                   <button key={r} onClick={() => { k.setRoute(r); k.touch(); }}

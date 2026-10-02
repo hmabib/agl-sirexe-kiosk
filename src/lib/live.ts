@@ -4,7 +4,7 @@ export interface StreamResult { reply: string; provider: string; model: string; 
 
 // Streaming SSE mot-à-mot : onToken reçoit le texte cumulé.
 export async function askStream(
-  payload: { message: string; context?: unknown; image?: string; lang?: string; model?: string },
+  payload: { message: string; context?: unknown; image?: string; lang?: string; model?: string; voice?: boolean },
   onToken: (full: string) => void
 ): Promise<StreamResult> {
   const res = await fetch("/api/gemini/stream", {
@@ -39,6 +39,13 @@ export async function askStream(
 }
 
 // Tente la voix studio serveur, sinon false -> synthèse locale.
+let currentAudio: HTMLAudioElement | null = null;
+export function stopServerVoice() {
+  try {
+    if (currentAudio) { currentAudio.pause(); currentAudio.src = ""; currentAudio = null; }
+    if (typeof speechSynthesis !== "undefined") speechSynthesis.cancel();
+  } catch { /* silencieux */ }
+}
 export async function playServerVoice(text: string, lang: string): Promise<boolean> {
   try {
     const r = await fetch("/api/tts", {
@@ -51,8 +58,9 @@ export async function playServerVoice(text: string, lang: string): Promise<boole
     if (!j.ok || !j.audio) return false;
     await new Promise<void>((resolve) => {
       const a = new Audio(j.audio);
-      a.onended = () => resolve();
-      a.onerror = () => resolve();
+      currentAudio = a;
+      a.onended = () => { if (currentAudio === a) currentAudio = null; resolve(); };
+      a.onerror = () => { if (currentAudio === a) currentAudio = null; resolve(); };
       a.play().catch(() => resolve());
       setTimeout(resolve, 30000);
     });

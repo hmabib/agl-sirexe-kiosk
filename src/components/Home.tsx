@@ -9,7 +9,21 @@ const CARDS = [
   { id: "mission", num: "01", icon: "🗺️", grad: "from-[#0a4d8c] to-[#04142b]" },
   { id: "explore", num: "02", icon: "🌍", grad: "from-[#123a6b] to-[#04142b]" },
   { id: "build", num: "03", icon: "🏗️", grad: "from-[#3a2f10] to-[#0a1a33]" },
+  { id: "vision", num: "04", icon: "📷", grad: "from-[#0b3b2e] to-[#04142b]" },
 ];
+
+const TITLES: Record<string, [string, string]> = {
+  mission: ["MISSION CONTROL", "Pilotez une opération logistique complexe."],
+  explore: ["EXPLORE AGL", "Entrez dans la chaîne logistique."],
+  build: ["BUILD AFRICA", "Construisez le corridor logistique de demain."],
+  vision: ["VISION LAB", "Caméra live : détection + analyse Gemini."],
+};
+const TITLES_EN: Record<string, [string, string]> = {
+  mission: ["MISSION CONTROL", "Drive a complex logistics operation."],
+  explore: ["EXPLORE AGL", "Step inside the supply chain."],
+  build: ["BUILD AFRICA", "Build tomorrow's logistics corridor."],
+  vision: ["VISION LAB", "Live camera: detection + Gemini analysis."],
+};
 
 export function HomeScreen() {
   const k = useKiosk();
@@ -35,7 +49,7 @@ export function HomeScreen() {
           <div className="shrink-0 text-[10px] text-white/35">● LIVE • illustratif</div>
         </div>
       </div>
-      <div className="max-w-6xl mx-auto px-6 md:px-10 pb-28 pt-6 grid md:grid-cols-3 gap-5">
+      <div className="max-w-6xl mx-auto px-6 md:px-10 pb-28 pt-6 grid md:grid-cols-2 lg:grid-cols-4 gap-5">
         {CARDS.map((c, i) => (
           <motion.button
             key={c.id}
@@ -47,8 +61,8 @@ export function HomeScreen() {
             <div>
               <div className="text-sm tracking-[0.3em] text-[#D6A84B] font-bold">EXPÉRIENCE {c.num}</div>
               <div className="text-7xl my-6 floaty">{c.icon}</div>
-              <h2 className="text-3xl font-extrabold">{c.id === "mission" ? t("mission", k.lang) : c.id === "explore" ? t("explore", k.lang) : t("build", k.lang)}</h2>
-              <p className="text-white/65 mt-2 text-lg">{c.id === "mission" ? t("mission_sub", k.lang) : c.id === "explore" ? t("explore_sub", k.lang) : t("build_sub", k.lang)}</p>
+              <h2 className="text-3xl font-extrabold">{(k.lang === "fr" ? TITLES : TITLES_EN)[c.id][0]}</h2>
+              <p className="text-white/65 mt-2 text-lg">{(k.lang === "fr" ? TITLES : TITLES_EN)[c.id][1]}</p>
             </div>
             <div className="mt-8 h-16 rounded-2xl bg-gradient-to-r from-[#D6A84B] to-[#F2D28B] text-[#001D3D] font-extrabold flex items-center justify-center text-lg">
               ▶ EXPLORER →

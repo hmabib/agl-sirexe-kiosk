@@ -93,3 +93,31 @@ html, body {
 
 input, textarea, select { font-size: 18px !important; }
 button { cursor: pointer; touch-action: manipulation; }
+
+/* ---------- Vraies cartes Leaflet (thème AGL) ---------- */
+.realmap { background: #04142b; touch-action: pan-x pan-y; }
+.realmap .leaflet-container { background: #04142b; font-family: inherit; }
+.rmark-wrap { background: none; border: none; }
+.rmark { transform: translate(-50%, -50%); display: flex; flex-direction: column; align-items: center; }
+.rmark span {
+  display: flex; align-items: center; justify-content: center;
+  min-width: 30px; min-height: 30px; border-radius: 9999px;
+  background: #0a2242; border: 2px solid #7fb3e8; font-size: 15px; padding: 2px 6px;
+}
+.rmark label {
+  margin-top: 3px; font-size: 10px; font-weight: 800; letter-spacing: .04em;
+  color: #cfe4ff; background: rgba(0,10,24,.75); border-radius: 6px; padding: 1px 6px; white-space: nowrap;
+}
+.rmark.port span, .rmark.hub span { border-color: #F2D28B; min-width: 40px; min-height: 40px; font-size: 19px; }
+.rmark.port label, .rmark.hub label { color: #F2D28B; }
+.rmark.mine span { border-color: #F2D28B; }
+.rmark.gold span { background: #D6A84B; border-color: #F2D28B; box-shadow: 0 0 18px rgba(214,168,75,.8); }
+.rmark.minor span { min-width: 16px; min-height: 16px; font-size: 9px; border-width: 1.5px; }
+.rmark.minor label { font-size: 9px; font-weight: 600; }
+.rmark.ref span { background: transparent; border-color: rgba(127,179,232,.5); }
+.rmark.ref label { color: #7fb3e8; }
+.rmark.alert span { min-width: 44px; min-height: 44px; font-size: 22px; border-color: #ff5a5a; animation: haloPulse 1.4s ease-in-out infinite; }
+.rroute { cursor: pointer; }
+.leaflet-bar a { background: #0a2242 !important; color: #F2D28B !important; border-color: rgba(214,168,75,.35) !important; width: 44px !important; height: 44px !important; line-height: 44px !important; font-size: 22px !important; }
+.leaflet-control-attribution { background: rgba(0,10,24,.6) !important; color: rgba(255,255,255,.45) !important; font-size: 9px !important; }
+.leaflet-control-attribution a { color: rgba(242,210,139,.7) !important; }

@@ -1,6 +1,6 @@
 import { promises as fs } from "fs";
 import path from "path";
-import { AGL_SYSTEM_PROMPT } from "@/lib/prompt";
+import { AGL_SYSTEM_PROMPT, VISION_VOICE_PROMPT } from "@/lib/prompt";
 
 // ---- Derniers modèles (vérifié oct. 2026) ----
 export const GEMINI_TEXT_DEFAULT = process.env.GEMINI_MODEL || "gemini-3.8-flash";
@@ -50,10 +50,11 @@ export function mockReply(_message: string, context: unknown) {
   return `Vous regardez « ${what} » (expérience ${c.experience ?? "AGL"}). 1) Ce qui se passe : le flux relie la ressource au port puis au marché. 2) Pourquoi c'est important : chaque rupture coûte temps et fiabilité. 3) Savoir-faire AGL : multimodal route + rail, terminal ops et coordination douanière. (Simulation illustrative — AGL AI hors-ligne, ajoutez GEMINI_API_KEY pour le temps réel.)`;
 }
 
-async function callGemini(key: string, model: string, message: string, context: unknown, lang: string, image?: string) {
+async function callGemini(key: string, model: string, message: string, context: unknown, lang: string, image?: string, voice?: boolean) {
   const knowledge = await getKnowledge();
+  const sys = voice ? `${VISION_VOICE_PROMPT}\n\n${AGL_SYSTEM_PROMPT}` : AGL_SYSTEM_PROMPT;
   const parts: any[] = [{
-    text: `${AGL_SYSTEM_PROMPT}\n\nBase de connaissances AGL:\n${knowledge || "(vide — parler en termes généraux)"}\n\nContexte écran JSON:\n${JSON.stringify(context ?? {}).slice(0, 4000)}\n\nLangue: ${lang}\nQuestion visiteur: ${message}`,
+    text: `${sys}\n\nBase de connaissances AGL:\n${knowledge || "(vide — parler en termes généraux)"}\n\nContexte écran JSON:\n${JSON.stringify(context ?? {}).slice(0, 4000)}\n\nLangue: ${lang}\n${voice ? "Transcription visiteur (oral)" : "Question visiteur"}: ${message}`,
   }];
   if (image) {
     const b64 = image.includes(",") ? image.split(",")[1] : image;
@@ -89,16 +90,17 @@ async function callGemini(key: string, model: string, message: string, context: 
   throw new Error(lastErr);
 }
 
-async function callMistral(key: string, model: string, message: string, context: unknown, lang: string, image?: string) {
+async function callMistral(key: string, model: string, message: string, context: unknown, lang: string, image?: string, voice?: boolean) {
   const knowledge = await getKnowledge();
-  const content = `${AGL_SYSTEM_PROMPT}\n\nBase AGL:\n${knowledge.slice(0, 3000)}\n\nContexte écran JSON: ${JSON.stringify(context ?? {}).slice(0, 4000)}\nLangue: ${lang}\nQuestion: ${message}${image ? "\n[Image jointe côté client — reste prudent.]" : ""}`;
+  const sys = voice ? `${VISION_VOICE_PROMPT}\n\n${AGL_SYSTEM_PROMPT}` : AGL_SYSTEM_PROMPT;
+  const content = `${sys}\n\nBase AGL:\n${knowledge.slice(0, 3000)}\n\nContexte écran JSON: ${JSON.stringify(context ?? {}).slice(0, 4000)}\nLangue: ${lang}\nQuestion: ${message}${image ? "\n[Image jointe côté client — reste prudent.]" : ""}`;
   const r = await fetch("https://api.mistral.ai/v1/chat/completions", {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
     body: JSON.stringify({
       model,
       messages: [
-        { role: "system", content: AGL_SYSTEM_PROMPT },
+        { role: "system", content: sys },
         { role: "user", content },
       ],
       max_tokens: 400,
@@ -115,9 +117,9 @@ async function callMistral(key: string, model: string, message: string, context:
 export interface ReplyResult { reply: string; provider: Provider | "gemini" | "mistral"; model: string; error?: string }
 
 export async function getReply(opts: {
-  message: string; context?: unknown; image?: string; lang?: string; modelOverride?: string;
+  message: string; context?: unknown; image?: string; lang?: string; modelOverride?: string; voice?: boolean;
 }): Promise<ReplyResult> {
-  const { message, context, image, lang = "fr", modelOverride } = opts;
+  const { message, context, image, lang = "fr", modelOverride, voice } = opts;
   const { key, provider } = resolveKey();
   if (!key) return { reply: mockReply(message, context), provider: "mock-offline", model: "offline" };
 
@@ -126,7 +128,7 @@ export async function getReply(opts: {
     let lastErr = "";
     for (const m of [...new Set(chain)]) {
       try {
-        const reply = await callMistral(key, m, message, context, lang, image);
+        const reply = await callMistral(key, m, message, context, lang, image, voice);
         return { reply, provider: "mistral", model: m };
       } catch (e: any) { lastErr = String(e?.message ?? e); console.error(lastErr.slice(0, 300)); }
     }
@@ -137,7 +139,7 @@ export async function getReply(opts: {
   let lastErr = "";
   for (const m of [...new Set(chain)]) {
     try {
-      const reply = await callGemini(key, m, message, context, lang, image);
+      const reply = await callGemini(key, m, message, context, lang, image, voice);
       return { reply, provider: "gemini", model: m };
     } catch (e: any) { lastErr = String(e?.message ?? e); console.error(lastErr.slice(0, 300)); }
   }

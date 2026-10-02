@@ -14,6 +14,7 @@ export async function POST(req: NextRequest) {
     image: body.image,
     lang: body.lang ?? "fr",
     modelOverride: body.model,
+    voice: body.voice === true,
   });
 
   const encoder = new TextEncoder();

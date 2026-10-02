@@ -3,20 +3,27 @@ import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useKiosk, logEvent } from "@/lib/store";
 import { TopBar } from "./Chrome";
-import { WestAfricaMap, iconFor } from "./Maps";
+import { iconFor } from "./Maps";
+import dynamic from "next/dynamic";
+import type { PlacedPoint } from "./RealMaps";
 import { ConfettiBurst, ScoreRing, sfx } from "./Fx";
+
+const RealWestAfrica = dynamic(() => import("./RealMaps").then((m) => m.RealWestAfrica), {
+  ssr: false,
+  loading: () => <div className="h-[420px] flex items-center justify-center text-[#D6A84B] animate-pulse">🌍 Chargement de la vraie carte…</div>,
+});
 
 const PALETTE = ["MINE", "ENERGY", "INDUSTRY", "LOGISTICS HUB", "RAIL", "ROAD", "PORT", "MARITIME ROUTE", "WAREHOUSE"];
 
 export function BuildScreen() {
   const k = useKiosk();
   const [selected, setSelected] = useState<string>("MINE");
-  const [placed, setPlaced] = useState<{ id: string; x: number; y: number }[]>([]);
+  const [placed, setPlaced] = useState<PlacedPoint[]>([]);
   const [countdown, setCountdown] = useState<number | null>(null);
   const [wowStep, setWowStep] = useState(0);
 
-  function place(x: number, y: number) {
-    const np = [...placed, { id: selected, x, y }];
+  function place(lat: number, lng: number) {
+    const np = [...placed, { id: selected, lat: +lat.toFixed(3), lng: +lng.toFixed(3) }];
     setPlaced(np);
     k.setCorridor([...k.corridor, selected]);
     k.touch(); sfx("pop");
@@ -40,7 +47,7 @@ export function BuildScreen() {
 
   return (
     <div className="absolute inset-0 overflow-y-auto kiosk-scroll" style={{ background: "linear-gradient(180deg,#0a0f22,#001D3D 60%,#00060f)" }}>
-      <TopBar title="BUILD AFRICA" subtitle="Glissez les infrastructures — connectez la ressource au marché." />
+      <TopBar title="BUILD AFRICA" subtitle="Choisissez un élément, touchez la vraie carte pour le poser — connectez la ressource au marché." />
       <div className="max-w-6xl mx-auto px-6 md:px-10 pb-32">
         {/* palette */}
         <div className="glass rounded-3xl p-4 mt-4">
@@ -57,7 +64,7 @@ export function BuildScreen() {
 
         <div className="grid md:grid-cols-3 gap-5 mt-5">
           <div className="md:col-span-2 glass rounded-3xl p-4 min-h-[420px]">
-            <WestAfricaMap placed={placed} onPlace={place} />
+            <RealWestAfrica placed={placed} onPlace={place} />
             <div className="flex gap-2 mt-3">
               <button onClick={() => { setPlaced([]); k.setCorridor([]); k.setCorridorActive(false); }} className="h-12 px-5 rounded-xl bg-white/10 font-bold">↺ Reset</button>
               {placed.length >= 2 && <div className="flex-1 h-12 rounded-xl bg-[#D6A84B]/15 border border-[#D6A84B]/50 flex items-center justify-center font-bold text-[#F2D28B]">✨ CONNECTER ? — ligne dorée tracée automatiquement</div>}
