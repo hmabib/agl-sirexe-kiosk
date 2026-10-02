@@ -33,6 +33,7 @@ export async function askStream(
   let full = "";
   let meta: StreamResult = { reply: "", provider: "?", model: "?" };
   let buf = "";
+  let streamed = 0;
   for (;;) {
     const { done, value } = await reader.read();
     if (done) break;
@@ -45,13 +46,30 @@ export async function askStream(
       try {
         const j = JSON.parse(line);
         if (j.t) { full += j.t; onToken(full); }
-        if (j.done) {meta = { reply: j.reply || full, provider: j.provider, model: j.model, actions: j.actions, degraded: j.degraded };for(const action of j.actions??[])publishAction(action);}
+        // Les vues sont publiées dès l’appel d’outil, avant la fin du texte.
+        if (j.action) { streamed++; publishAction(j.action); }
+        if (j.done) {meta = { reply: j.reply || full, provider: j.provider, model: j.model, actions: j.actions, degraded: j.degraded };if(!streamed)for(const action of j.actions??[])publishAction(action);}
       } catch { /* ignore */ }
     }
   }
   if (!meta.reply && !full) throw new Error("stream failed");
   meta.reply = meta.reply || full;
   return meta;
+}
+
+// Repli navigateur : toujours une voix féminine, française en FR.
+const FEMALE_VOICES = /am[ée]lie|audrey|aur[ée]lie|marie|julie|c[ée]line|denise|eloise|vivienne|virginie|hortense|l[ée]a|chantal|google fran[çc]ais|samantha|victoria|karen|zira|aria|jenny|female|femme/i;
+const MALE_VOICES = /thomas|daniel|henri|paul|claude|nicolas|jacques|alex|fred|male|homme/i;
+export function speakLocal(text: string, lang: string) {
+  if (typeof speechSynthesis === "undefined") return;
+  const tag = lang === "en" ? "en" : "fr-FR";
+  const voices = speechSynthesis.getVoices().filter(v => lang === "en" ? v.lang.startsWith("en") : v.lang.replace("_", "-").toLowerCase() === "fr-fr");
+  const voice = voices.find(v => FEMALE_VOICES.test(v.name) && !/\bmale\b/i.test(v.name)) ?? voices.find(v => !MALE_VOICES.test(v.name));
+  const u = new SpeechSynthesisUtterance(text);
+  u.lang = lang === "en" ? "en-US" : tag;
+  if (voice) u.voice = voice;
+  u.pitch = 1.05;
+  speechSynthesis.speak(u);
 }
 
 // Tente la voix studio serveur, sinon false -> synthèse locale.

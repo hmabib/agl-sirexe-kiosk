@@ -48,7 +48,12 @@ Les boutons de fin d’expérience mènent à `/satisfaction`. Les formulaires e
 ## Données et limites
 
 - Les rendez-vous et candidatures sont stockés dans le navigateur de la borne et exportables en JSON/CSV. Aucune réservation, transmission RH ou synchronisation CRM n’est réalisée.
-- Les contours de l’Afrique proviennent de Natural Earth. Les fonds interactifs utilisent OpenStreetMap/CARTO ; un mode vectoriel sert de repli si les tuiles sont indisponibles.
+- Les contours de l’Afrique proviennent de Natural Earth. Toutes les cartes utilisent des sources ouvertes et sans clé :
+  - **Carte cinématique 3D** (Vue Live, Explore) : MapLibre GL (BSD-3) + OpenFreeMap (données OpenStreetMap / OpenMapTiles), relief Terrarium (AWS Open Data). Vol d’arrivée Afrique → Côte d’Ivoire, pays mis en lumière (contour GADM doré, reste du monde voilé), corridors tracés en or avec convoi animé, repères AGL pulsants (ports, hub), bâtiments 3D au port d’Abidjan, relief de Man, orbite lente au repos. Chaque maillon d’Explore fait voler la caméra vers son lieu.
+  - **Cartes Leaflet** (Mission, Build) : tuiles OpenStreetMap teintées aux couleurs AGL.
+  - Repli automatique : carte cinématique → Leaflet/OSM → schéma vectoriel hors ligne.
+  - Le worker MapLibre est copié dans `public/maplibre/` par `predev`/`prebuild` (`scripts/copy-maplibre-worker.mjs`).
+  - Les tuiles OpenStreetMap publiques conviennent à une borne au trafic modeste ; pour un déploiement à grande échelle, prévoir un serveur de tuiles dédié (politique d’usage OSM).
 - Les liaisons, scores, délais, coûts, CO₂ et impacts des jeux sont illustratifs. Les villes sont réelles ; la faisabilité d’un transport exige une étude de route.
 - Le cas Tokadeh reprend les éléments documentaires Africa Global Logistics : concentrateur à Tokadeh, chargeur à Buchanan et 34 navires affrétés déchargés. Les visuels du template sont des illustrations métier.
 - `/api/market` récupère la croissance annuelle réelle du PIB de la Côte d’Ivoire, indicateur Banque mondiale `NY.GDP.MKTP.KD.ZG`. En cas d’indisponibilité, aucune donnée de substitution n’est inventée.
@@ -60,6 +65,16 @@ Les boutons de fin d’expérience mènent à `/satisfaction`. Les formulaires e
 `/api/gemini/stream` utilise le streaming natif du SDK IA et les derniers tours de conversation. Le contexte de l’écran et `knowledge/*.md` sont inclus dans les instructions. Les outils autorisés peuvent ouvrir un parcours, afficher un corridor ou une fiche téléchargeable.
 
 `/api/live/token` crée un jeton éphémère à usage unique. Le navigateur utilise ce jeton pour la voix en direct : micro PCM16/16 kHz, audio de sortie 24 kHz, transcriptions et images caméra réduites. La clé permanente reste côté serveur. HTTPS ou localhost et les autorisations navigateur sont nécessaires.
+
+## Vue Live : une instruction, une solution à l’écran
+
+Chaque instruction donnée à Lara (voix Gemini Live ou texte) se matérialise dans la **Vue Live**, affichée à côté de la conversation sans la masquer. L’outil `show_solution` produit une solution structurée : synthèse, étapes avec leur mode (port, douane, route, rail, heavy lift…), points à valider, corridor cartographié, visuel généré et parcours suivants. Une précision avec le même titre met la vue à jour ; les 6 dernières vues restent accessibles dans un historique. Les cartes, fiches et images utilisent la même vue.
+
+En Live, chaque appel d’outil reçoit une réponse décrivant ce qui est réellement affiché, et le modèle lit l’écran à la demande (`get_screen_context`) au lieu de recevoir le contexte toutes les 2,5 s. Les sessions utilisent la compression de contexte et la reprise (`sessionResumption`) : à l’annonce de fin de session ou après une coupure, la conversation se reconnecte sans être perdue (3 tentatives). En mode texte, les vues apparaissent dès l’appel d’outil, sans attendre la fin du texte ni la génération d’image.
+
+## Son et interactions
+
+`src/lib/sound.ts` synthétise le design sonore en WebAudio, sans fichier audio : toucher, onglet, validation, fermeture, ouverture de Lara, transition d’écran, apparition d’une vue, connexion Live. Tous les boutons de la borne en bénéficient automatiquement (attribut `data-sfx` pour forcer un son, `data-sfx="off"` pour le couper), avec une micro-vibration si l’écran la gère. Le bouton Son coupe l’ensemble et l’état est conservé.
 
 ## Studio créatif et carte de visite
 

@@ -1,74 +1,8 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 
-// ---------- Sound design WebAudio ----------
-let actx: AudioContext | null = null;
-let ambientNodes: { osc: OscillatorNode[]; gain: GainNode } | null = null;
-function ctx() {
-  if (typeof window === "undefined") return null;
-  actx = actx ?? new window.AudioContext();
-  if (actx.state === "suspended") actx.resume().catch(() => {});
-  return actx;
-}
-export function sfx(kind: "select" | "success" | "alert" | "whoosh" | "pop" = "select") {
-  try {
-    if (typeof window === "undefined") return;
-    if (localStorage.getItem("agl_mute") === "1") return;
-    actx = actx ?? new window.AudioContext();
-    const t = actx.currentTime;
-    const notes: Record<string, number[]> = {
-      select: [660, 880],
-      pop: [520],
-      success: [523, 659, 784, 1046],
-      alert: [330, 262],
-      whoosh: [220, 440, 660],
-    };
-    (notes[kind] ?? notes.select).forEach((f, i) => {
-      const o = actx!.createOscillator();
-      const g = actx!.createGain();
-      o.type = kind === "alert" ? "sawtooth" : "sine";
-      o.frequency.value = f;
-      g.gain.setValueAtTime(0.0001, t + i * 0.12);
-      g.gain.exponentialRampToValueAtTime(0.18, t + i * 0.12 + 0.03);
-      g.gain.exponentialRampToValueAtTime(0.0001, t + i * 0.12 + 0.35);
-      o.connect(g).connect(actx!.destination);
-      o.start(t + i * 0.12);
-      o.stop(t + i * 0.12 + 0.4);
-    });
-    } catch { /* silencieux */ }
-}
-
-// ---- nappe d'ambiance futuriste (démarre au 1er toucher) ----
-export function startAmbient() {
-  try {
-    const ac = ctx();
-    if (!ac || ambientNodes) return;
-    if (typeof window !== "undefined" && localStorage.getItem("agl_mute") === "1") return;
-    const gain = ac.createGain();
-    gain.gain.value = 0.0;
-    gain.gain.linearRampToValueAtTime(0.035, ac.currentTime + 3);
-    const filter = ac.createBiquadFilter();
-    filter.type = "lowpass"; filter.frequency.value = 420;
-    const osc = [55, 82.5, 110.3].map((f) => {
-      const o = ac.createOscillator();
-      o.type = "sine"; o.frequency.value = f;
-      o.connect(filter); o.start();
-      return o;
-    });
-    filter.connect(gain).connect(ac.destination);
-    ambientNodes = { osc, gain };
-  } catch { /* silencieux */ }
-}
-export function stopAmbient() {
-  try {
-    const nodes = ambientNodes;
-    ambientNodes = null;
-    if (nodes && actx) {
-      nodes.gain.gain.linearRampToValueAtTime(0.0001, actx.currentTime + 0.5);
-      setTimeout(() => nodes.osc.forEach((o) => { try { o.stop(); } catch {} }), 700);
-    }
-  } catch { ambientNodes = null; }
-}
+import { sfx } from "@/lib/sound";
+export { sfx, startAmbient, stopAmbient } from "@/lib/sound";
 
 // ---------- Compteur animé ----------
 export function CountUp({ to, suffix = "", duration = 1400 }: { to: number; suffix?: string; duration?: number }) {

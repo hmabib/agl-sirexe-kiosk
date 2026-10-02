@@ -132,3 +132,70 @@
 .brand-btn.live-on { box-shadow:0 0 0 3px #eed58e88,0 0 30px #eed58e44; animation:livepulse 1.6s infinite; }
 .kb-zoom { animation:kbzoom 7s ease-in-out infinite alternate; }
 @keyframes kbzoom { from { transform:scale(1); } to { transform:scale(1.18); } }
+
+/* Vue Live : la solution demandée à Lara s’affiche à côté de la conversation */
+.live-stage { position:fixed; inset:18px; z-index:80; display:flex; flex-direction:column; background:#10213b; border:1px solid #eed58e55; border-radius:24px; box-shadow:0 20px 70px #000a; overflow:hidden; }
+.live-stage.docked { right:516px; z-index:72; }
+@media (max-width:1099px) { .live-stage.docked { right:18px; z-index:80; } }
+.live-stage-head { display:flex; align-items:center; justify-content:space-between; gap:16px; padding:16px 22px; border-bottom:1px solid #ffffff14; }
+.live-stage-title { margin:0; font-size:clamp(20px,2.2vw,28px); font-weight:800; line-height:1.2; overflow:hidden; text-overflow:ellipsis; }
+.live-stage-history { display:flex; gap:8px; padding:10px 22px; overflow-x:auto; border-bottom:1px solid #ffffff10; }
+.live-stage-history button { flex:none; max-width:240px; min-height:40px; padding:0 14px; border-radius:99px; border:1px solid #ffffff22; background:#0f203a; color:#c9d6ea; font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.live-stage-history button.active { border-color:var(--gold); color:var(--gold); }
+.live-stage-body { flex:1; overflow:auto; padding:22px; }
+.live-stage-foot { padding:16px 22px; border-top:1px solid #ffffff14; }
+.live-summary { font-size:19px; line-height:1.7; color:#e8eef8; max-width:900px; }
+.live-steps { list-style:none; margin:22px 0 0; padding:0; display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:14px; counter-reset:none; }
+.live-steps li { position:relative; padding:18px; border-radius:18px; background:#0f203a; border:1px solid #3a6ea566; }
+.live-steps li:first-child, .live-steps li:last-child { border-color:#eed58e88; }
+.live-steps li strong { display:block; font-size:16px; margin-top:6px; color:#fff; }
+.live-steps li p { font-size:14px; line-height:1.55; color:#b9c9e0; margin-top:6px; }
+.live-step-icon { width:42px; height:42px; display:grid; place-items:center; border-radius:12px; background:#eed58e1f; color:var(--gold); margin-bottom:10px; }
+.live-step-num { font-size:11px; letter-spacing:.12em; color:#9dc0e8; font-weight:700; text-transform:uppercase; }
+.live-points { display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:10px; margin-top:10px; }
+.live-points > div { display:flex; gap:10px; padding:14px; border-radius:14px; background:#ffffff08; border:1px solid #ffffff14; }
+.live-points svg { flex:none; color:var(--gold); margin-top:3px; }
+.live-points strong { font-size:14px; }
+.live-points p { font-size:14px; line-height:1.5; color:#b9c9e0; margin-top:2px; }
+.live-skeleton { display:flex; align-items:center; justify-content:center; gap:12px; min-height:260px; border-radius:16px; color:#c9d6ea; background:linear-gradient(110deg,#0f203a 30%,#1b365f 50%,#0f203a 70%); background-size:200% 100%; animation:liveshimmer 1.6s linear infinite; }
+.live-skeleton.error { animation:none; background:#0f203a; flex-direction:column; }
+@keyframes liveshimmer { to { background-position:-200% 0; } }
+@media (prefers-reduced-motion:reduce) { .live-skeleton { animation:none; } }
+
+/* Micro-interactions : chaque bouton réagit au toucher (son géré dans lib/sound.ts) */
+:where(.brand-btn,.outline-btn,.text-action,.pill,.ai-icon-btn,.stage-tabs button,.topbar-controls button,.ai-suggestions button,.ai-launcher,.live-stage-history button,.feature-card) { transition:transform .2s cubic-bezier(.22,1,.36,1), background-color .2s, border-color .2s, box-shadow .25s, color .2s; -webkit-tap-highlight-color:transparent; }
+:where(.brand-btn,.outline-btn,.text-action,.pill,.ai-icon-btn,.stage-tabs button,.topbar-controls button,.ai-suggestions button,.ai-launcher,.live-stage-history button):not(:disabled):active { transform:scale(.95); transition-duration:.06s; }
+.brand-btn { position:relative; overflow:hidden; box-shadow:0 8px 28px #eed58e30; }
+.brand-btn::after { content:""; position:absolute; inset:0; pointer-events:none; background:linear-gradient(110deg,transparent 35%,#ffffff8c 50%,transparent 65%); transform:translateX(-130%); animation:btnshine 5s ease-in-out infinite; }
+.brand-btn:not(:disabled):active { box-shadow:0 0 0 6px #eed58e33, 0 8px 28px #eed58e44; }
+.outline-btn:not(:disabled):hover, .outline-btn:not(:disabled):active { border-color:var(--gold); box-shadow:0 0 0 1px #eed58e44, 0 10px 30px #eed58e1a; }
+.pill:not(:disabled):active, .ai-suggestions button:not(:disabled):active { background:#eed58e22; border-color:var(--gold); }
+.stage-tabs button[aria-selected="true"] { box-shadow:inset 0 0 0 1px var(--gold), 0 8px 24px #eed58e22; }
+.ai-launcher { animation:launcherglow 3.2s ease-in-out infinite; }
+:focus-visible { outline:3px solid var(--gold); outline-offset:3px; }
+@keyframes btnshine { 0%,72% { transform:translateX(-130%); } 100% { transform:translateX(130%); } }
+@keyframes launcherglow { 0%,100% { box-shadow:0 8px 35px #0005, 0 0 0 0 #eed58e66; } 60% { box-shadow:0 8px 35px #0005, 0 0 0 14px #eed58e00; } }
+@media (prefers-reduced-motion:reduce) { .brand-btn::after, .ai-launcher { animation:none; } }
+.live-stage .pill { display:inline-flex; align-items:center; gap:6px; white-space:nowrap; min-height:44px; }
+
+/* Cartes : fond OpenStreetMap teinté marque (Leaflet) et carte cinématique 3D (MapLibre + OpenFreeMap) */
+.realmap .leaflet-tile-pane { filter:invert(1) grayscale(.6) sepia(.25) hue-rotate(175deg) brightness(.7) contrast(1.15) saturate(1.4); }
+.cine-map { position:relative; border-radius:20px; overflow:hidden; background:#04122a; box-shadow:inset 0 0 0 1px #eed58e33; }
+.cine-canvas { position:absolute !important; inset:0; width:100%; height:100%; }
+.cine-loading { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; gap:10px; color:#c9d6ea; background:radial-gradient(circle at 50% 55%,#1b365f,#04122a 70%); animation:livepulse 2s ease-in-out infinite; }
+.cine-controls { position:absolute; top:12px; left:12px; display:flex; flex-wrap:wrap; gap:8px; max-width:calc(100% - 24px); }
+.cine-controls button, .cine-routes button { display:inline-flex; align-items:center; gap:6px; min-height:44px; padding:0 14px; border-radius:99px; background:#04122acc; backdrop-filter:blur(8px); border:1px solid #eed58e44; color:#f4e6bd; font-size:13px; font-weight:700; transition:transform .2s cubic-bezier(.22,1,.36,1),border-color .2s,background .2s; }
+.cine-controls button:active, .cine-routes button:active { transform:scale(.94); }
+.cine-routes { position:absolute; bottom:12px; left:12px; right:12px; display:flex; gap:8px; overflow-x:auto; }
+.cine-routes button { flex:none; }
+.cine-routes button.active { background:#EED58E; color:#04122a; border-color:#EED58E; }
+.cine-mark { position:relative; display:flex; flex-direction:column; align-items:center; pointer-events:none; }
+.cine-mark span { display:grid; place-items:center; width:12px; height:12px; border-radius:50%; background:#9dc0e8; border:2px solid #04122a; font-size:0; }
+.cine-mark.port span, .cine-mark.hub span { width:34px; height:34px; font-size:17px; background:#04122add; border:2px solid #EED58E; color:#EED58E; box-shadow:0 0 22px #eed58e88; }
+.cine-mark label { margin-top:4px; padding:2px 8px; border-radius:6px; background:#04122acc; font-size:11px; font-weight:700; color:#dbe6f5; white-space:nowrap; text-transform:uppercase; letter-spacing:.04em; }
+.cine-mark.port label, .cine-mark.hub label { color:#EED58E; font-size:12px; }
+.cine-pulse { position:absolute; top:-9px; left:50%; width:52px; height:52px; margin-left:-26px; border-radius:50%; border:2px solid #EED58E; animation:cinepulse 2.4s ease-out infinite; }
+@keyframes cinepulse { from { transform:scale(.4); opacity:.9; } to { transform:scale(1.6); opacity:0; } }
+.cine-map .maplibregl-ctrl-attrib { background:#04122acc; color:#9db3d1; font-size:10px; }
+.cine-map .maplibregl-ctrl-attrib a { color:#c9d6ea; }
+@media (prefers-reduced-motion:reduce) { .cine-pulse, .cine-loading { animation:none; } }

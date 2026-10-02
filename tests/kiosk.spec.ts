@@ -52,7 +52,7 @@ test("screenshots at landscape and portrait sizes",async({page})=>{
 });
 
 test("Build remains playable when map tiles are unavailable",async({page})=>{
-  await page.route("**://*.basemaps.cartocdn.com/**",route=>route.abort());
+  await page.route("**://tile.openstreetmap.org/**",route=>route.abort());
   await page.goto("/build");
   const map=page.getByRole("img",{name:"Carte de simulation hors ligne"});
   await expect(map).toBeVisible();
@@ -115,4 +115,19 @@ test("Lara generates an image directly without opening Canvas",async({page})=>{
   await expect(page.getByRole("dialog",{name:"Corridor au lever du soleil"})).toBeVisible();
   await expect(page.getByRole("img",{name:"Visuel généré"})).toBeVisible();
   await expect(page.getByRole("button",{name:"Télécharger l’image"})).toBeVisible();
+});
+
+test("an instruction to Lara materialises a solution view beside the conversation",async({page})=>{
+  const solution={type:"solution",solution:{title:"Équipement minier vers Korhogo",summary:"Acheminement multimodal depuis Abidjan avec étude de route préalable.",steps:[{label:"Réception au port",detail:"Déchargement au port d’Abidjan",mode:"port"},{label:"Dédouanement",detail:"Formalités et conformité",mode:"customs"},{label:"Convoi exceptionnel",detail:"Transport routier vers le Nord",mode:"heavy_lift"}],considerations:[{label:"Gabarit",text:"Ouvrages et charges admissibles à étudier."}],route:"route-A",imagePrompt:"heavy mining equipment convoy at sunrise",next:["mission","appointment"]}};
+  await page.route("**/api/gemini/stream",route=>route.fulfill({contentType:"text/event-stream",body:`data: ${JSON.stringify({action:solution})}\n\ndata: {"t":"Je vous ai affiché la solution."}\n\ndata: ${JSON.stringify({done:true,reply:"Je vous ai affiché la solution.",provider:"gemini",model:"test-model",actions:[solution]})}\n\n`}));
+  await page.route("**/api/studio/image",r=>r.fulfill({status:200,contentType:"application/json",body:JSON.stringify({ok:true,image:"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",text:"",model:"test-image"})}));
+  await page.route("**/api/tts",r=>r.fulfill({status:503,body:"{}"}));
+  await page.goto("/accueil");await page.getByRole("button",{name:"Ouvrir Lara"}).click();await page.getByLabel("Question à Lara").fill("Organise 80 t vers Korhogo");await page.getByRole("button",{name:"Envoyer la question"}).click();
+  const view=page.getByRole("dialog",{name:"Équipement minier vers Korhogo"});
+  await expect(view).toBeVisible();await expect(view.getByText("Convoi exceptionnel")).toBeVisible();await expect(view.getByText("Gabarit")).toBeVisible();
+  await expect(view.getByRole("img",{name:"Visuel généré"})).toBeVisible();
+  await expect(page.getByLabel("Question à Lara")).toBeVisible();
+  expect(await page.evaluate(()=>document.querySelectorAll(".live-stage").length)).toBe(1);
+  const dl=page.waitForEvent("download");await view.getByRole("button",{name:"Télécharger la fiche"}).click();expect((await dl).suggestedFilename()).toContain("solution");
+  await view.getByRole("button",{name:/Mission Control/}).click();await expect(page).toHaveURL(/mission$/);
 });

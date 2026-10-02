@@ -3,6 +3,7 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useR
 import type { Lang } from "./i18n";
 import { sessionId } from "./analytics";
 import { AGL_SYSTEM_PROMPT } from "./prompt";
+import { isMuted, setMuted } from "./sound";
 
 export { AGL_SYSTEM_PROMPT };
 
@@ -108,11 +109,9 @@ export function KioskProvider({ children, initialScreen = "attract" }: { childre
 
   const touch = useCallback(() => {
     setLastTouch(Date.now());
-    try {
-      const el = document.getElementById("kiosk-beep");
-      if (el && soundOn) (el as HTMLAudioElement).play().catch(() => {});
-    } catch {}
-  }, [soundOn]);
+  }, []);
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => { if (isMuted()) setSoundOn(false); }, []);
 
   // Auto-reset 60s -> confirm -> attract
   useEffect(() => {
@@ -166,7 +165,7 @@ export function KioskProvider({ children, initialScreen = "attract" }: { childre
   const value = useMemo<KioskState>(
     () => ({
       screen, lang, setLang, go, kioskZoom, setKioskZoom, soundOn,
-      toggleSound: () => setSoundOn((v) => !v),
+      toggleSound: () => setSoundOn((v) => { setMuted(v); return !v; }),
       cargo, setCargo, scenario, setScenario, route, setRoute, incident, setIncident,
       selectedNode, setSelectedNode, xray, setXray, dataView, setDataView,
       corridor, setCorridor, corridorActive, setCorridorActive,

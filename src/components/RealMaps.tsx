@@ -4,9 +4,9 @@ import type * as Leaflet from "leaflet";
 import { CITIES, ROUTES } from "./civData";
 import { CivMap, WestAfricaMap, iconFor } from "./Maps";
 
-const TILES = "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png";
-const ATTR =
-  '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>';
+// Tuiles OpenStreetMap (libres, sans clé), teintées aux couleurs de la marque en CSS (.realmap).
+const TILES = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
+const ATTR = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
 
 function cityIcon(L: typeof Leaflet, c: { name: string; kind: string }, opts?: { gold?: boolean; big?: boolean }) {
   const emoji = c.kind === "port" ? "⚓" : c.kind === "mine" ? "⛏️" : c.kind === "hub" ? "🏬" : "•";
@@ -167,7 +167,7 @@ export function RealCivMap({
     <div className="relative">
       <div ref={divRef} className="realmap w-full h-[420px] md:h-[480px] rounded-2xl overflow-hidden" />
       <div className="absolute bottom-2 left-2 text-[10px] text-white/50 bg-black/50 rounded px-2 py-0.5">
-        Fond © OpenStreetMap · © CARTO — touchez une route pour la sélectionner
+        Fond © OpenStreetMap — touchez une route pour la sélectionner
       </div>
     </div>
   );
@@ -300,7 +300,7 @@ export function RealWestAfrica({
     <div className="relative">
       <div ref={divRef} className="realmap w-full h-[420px] md:h-[460px] rounded-2xl overflow-hidden" />
       <div className="absolute bottom-2 left-2 text-[10px] text-white/50 bg-black/50 rounded px-2 py-0.5">
-        Fond © OpenStreetMap · © CARTO — touchez la carte pour placer l’élément
+        Fond © OpenStreetMap — touchez la carte pour placer l’élément
       </div>
     </div>
   );

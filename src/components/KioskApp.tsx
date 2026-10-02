@@ -11,6 +11,7 @@ import { FinaleScreen } from "@/components/Finale";
 import dynamic from "next/dynamic";
 import { AIAssistant } from "@/components/AIAssistant";
 import { startAmbient } from "@/components/Fx";
+import { feedbackFor, sfx } from "@/lib/sound";
 import { ExperiencesScreen } from "./Experiences";
 import { MiningScreen } from "./Mining";
 import { CorporateScreen } from "./Corporate";
@@ -18,7 +19,7 @@ import { RequestForm } from "./RequestForm";
 import { ExternalExperience } from "./ExternalExperience";
 import { MarketScreen } from "./Market";
 import { CanvasScreen } from "./CanvasScreen";
-import { MaterialHost } from "./MaterialHost";
+import { LiveStage } from "./LiveStage";
 import { StudioHost } from "./StudioPanel";
 
 const VisionLab = dynamic(() => import("@/components/VisionLab").then((m) => m.VisionLab), { ssr: false });
@@ -52,8 +53,13 @@ function Shell() {
     return () => clearInterval(id);
   }, [k.screen, k.lastTouch]);
 
+  // Transition sonore à chaque changement d’écran (pas au premier affichage).
+  const firstScreen = useRef(true);
+  useEffect(() => { if (firstScreen.current) { firstScreen.current = false; return; } sfx("transition"); }, [k.screen]);
+
   function onDown(e: React.PointerEvent) {
     k.touch();
+    feedbackFor(e.target as Element);
     const r = idRef.current++;
     const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect();
     setRipples((rs) => [...rs.slice(-6), { id: r, x: e.clientX - rect.left, y: e.clientY - rect.top }]);
@@ -69,7 +75,7 @@ function Shell() {
     >
       <div className="kiosk-zoom h-full w-full origin-top" style={{ transform: `scale(${k.kioskZoom})`, height: `${100 / k.kioskZoom}%`, width: `${100 / k.kioskZoom}%` }}>
         <AnimatePresence mode="wait">
-          <motion.div key={k.screen} initial={{ opacity: 0, scale: 0.985 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 1.015 }} transition={{ duration: 0.5 }} className="h-full w-full relative">
+          <motion.div key={k.screen} initial={{ opacity: 0, scale: 0.97, y: 18 }} animate={{ opacity: 1, scale: 1, y: 0, transition: { duration: 0.38, ease: [0.22, 1, 0.36, 1] } }} exit={{ opacity: 0, scale: 1.02, transition: { duration: 0.16, ease: "easeIn" } }} className="h-full w-full relative">
             {k.screen === "attract" && <AttractScreen />}
             {k.screen === "home" && <HomeScreen />}
             {k.screen === "games" && <ExperiencesScreen />}
@@ -126,7 +132,7 @@ function Shell() {
       </AnimatePresence>
 
       {!["attract", "satisfaction", "quotation", "vision"].includes(k.screen) && <AIAssistant />}
-      <MaterialHost />
+      <LiveStage />
       <StudioHost />
     </div>
   );

@@ -20,7 +20,7 @@ export interface ReplyOptions {message:string;context?:unknown;image?:string;lan
 export interface ReplyResult {reply:string;provider:string;model:string;actions:MaterialAction[];degraded?:boolean}
 function unavailable(lang?:string):ReplyResult{return {reply:lang==="en"?"Lara is temporarily unavailable. You can still explore Mining, display a corridor or prepare an appointment using the kiosk.":"Lara est momentanément indisponible. Vous pouvez continuer à explorer le Mining, afficher un corridor ou préparer un rendez-vous depuis la borne.",provider:"offline",model:"offline",actions:[],degraded:true};}
 
-export async function getReply(opts:ReplyOptions,onToken?:(text:string)=>void):Promise<ReplyResult>{
+export async function getReply(opts:ReplyOptions,onToken?:(text:string)=>void,onAction?:(action:MaterialAction)=>void):Promise<ReplyResult>{
   const {key}=resolveKey();if(!key){const result=unavailable(opts.lang);onToken?.(result.reply);return result;}
   const history:Content[]=(Array.isArray(opts.history)?opts.history:[]).slice(-12).filter(t=>(t.role==="user"||t.role==="ai")&&typeof t.text==="string").map(t=>({role:t.role==="ai"?"model":"user",parts:[{text:t.text.slice(0,2500)}]}));
   const parts:Part[]=[{text:`Langue de l’écran : ${opts.lang??"fr"}\nContexte écran : ${JSON.stringify(opts.context??{}).slice(0,9000)}\nDemande du visiteur : ${opts.message.slice(0,4000)}`}];
@@ -35,7 +35,7 @@ export async function getReply(opts:ReplyOptions,onToken?:(text:string)=>void):P
       const config={systemInstruction:system,maxOutputTokens:opts.deepThink?4000:1800,tools:[{functionDeclarations:AGL_TOOLS}],httpOptions:{timeout:25000},...(opts.deepThink?{thinkingConfig:{thinkingBudget:2048}}:{})};
       let reply="";const actions:MaterialAction[]=[];
       const stream=await ai.models.generateContentStream({model,contents:[...history,{role:"user",parts}],config});
-      for await(const chunk of stream){const text=chunk.candidates?.[0]?.content?.parts?.filter(p=>p.text&&!p.thought).map(p=>p.text).join("")??"";if(text){reply+=text;onToken?.(text);emitted=true;}for(const call of chunk.functionCalls??[]){if(call.name==="generate_image"&&call.args&&typeof call.args.prompt==="string"&&call.args.prompt.trim()){const img=await getImage(call.args.prompt,opts.lang);if(img.ok&&img.image)actions.push({type:"show_image",title:typeof call.args.style==="string"?`Illustration · ${call.args.style}`:"Illustration",image:img.image,text:img.text??""});else actions.push({type:"open_studio",tab:"image",title:"Studio créatif",body:call.args.prompt.slice(0,800)});continue;}const action=parseToolAction(call.name,call.args);if(action)actions.push(action);}}
+      for await(const chunk of stream){const text=chunk.candidates?.[0]?.content?.parts?.filter(p=>p.text&&!p.thought).map(p=>p.text).join("")??"";if(text){reply+=text;onToken?.(text);emitted=true;}for(const call of chunk.functionCalls??[]){const action=parseToolAction(call.name,call.args);if(action){actions.push(action);onAction?.(action);}}}
       if(!reply&&actions.length){reply=opts.lang==="en"?"I’m opening the requested view for you.":"J’ouvre la vue demandée pour vous.";onToken?.(reply);}
       if(reply)return {reply,provider:"gemini",model,actions};
     } catch(e){console.warn("Lara upstream unavailable",model,e instanceof Error?e.name:"unknown");if(emitted)return {reply:opts.lang==="en"?"The connection was interrupted. Please try again.":"La connexion a été interrompue. Réessayez dans un instant.",provider:"gemini",model,actions:[],degraded:true};}

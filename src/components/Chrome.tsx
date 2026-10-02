@@ -4,7 +4,7 @@ import { Home, Volume2, VolumeX, MoveUpRight } from "lucide-react";
 import { useKiosk } from "@/lib/store";
 import { AglLogo } from "./Orb";
 import { ContinentMap } from "./ContinentMap";
-import { sfx, stopAmbient, startAmbient } from "./Fx";
+import { sfx } from "./Fx";
 
 export function AttractScreen() {
   const k = useKiosk(); const en = k.lang === "en";
@@ -17,5 +17,5 @@ export function AttractScreen() {
 }
 export function TopBar({ title, subtitle }: { title:string; subtitle?:string }) {
   const k=useKiosk();
-  return <div className="experience-topbar"><button className="logo-home" aria-label="Accueil Africa Global Logistics" onClick={()=>k.go("home")}><AglLogo size="sm"/></button><div className="topbar-title"><h1>{title}</h1>{subtitle&&<p>{subtitle}</p>}</div><div className="topbar-controls"><button className={k.lang==="fr"?"active":""} onClick={()=>k.setLang("fr")}>FR</button><button className={k.lang==="en"?"active":""} onClick={()=>k.setLang("en")}>EN</button><button aria-label="Son" onClick={()=>{k.toggleSound();try{const mute=k.soundOn;localStorage.setItem("agl_mute",mute?"1":"0");mute?stopAmbient():startAmbient();}catch{}}}>{k.soundOn?<Volume2 size={22}/>:<VolumeX size={22}/>}</button><button aria-label="Accueil" onClick={()=>k.go("home")}><Home size={22}/></button></div></div>;
+  return <div className="experience-topbar"><button className="logo-home" aria-label="Accueil Africa Global Logistics" onClick={()=>k.go("home")}><AglLogo size="sm"/></button><div className="topbar-title"><h1>{title}</h1>{subtitle&&<p>{subtitle}</p>}</div><div className="topbar-controls"><button className={k.lang==="fr"?"active":""} onClick={()=>k.setLang("fr")}>FR</button><button className={k.lang==="en"?"active":""} onClick={()=>k.setLang("en")}>EN</button><button aria-label="Son" onClick={()=>k.toggleSound()}>{k.soundOn?<Volume2 size={22}/>:<VolumeX size={22}/>}</button><button aria-label="Accueil" onClick={()=>k.go("home")}><Home size={22}/></button></div></div>;
 }

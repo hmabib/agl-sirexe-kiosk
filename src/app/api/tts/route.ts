@@ -19,7 +19,7 @@ export async function POST(req: NextRequest) {
           method: "POST",
           headers: { "Content-Type": "application/json", "X-goog-api-key": key },
           body: JSON.stringify({
-            contents: [{ parts: [{ text: `Dis avec une voix chaleureuse et professionnelle (${lang === "en" ? "anglais" : "français"}): ${(text as string).slice(0, 500)}` }] }],
+            contents: [{ parts: [{ text: lang === "en" ? `Say in a warm, professional female voice, in English with a light French accent: ${(text as string).slice(0, 500)}` : `Lis avec une voix de femme française, chaleureuse et professionnelle, en français de France, accent standard : ${(text as string).slice(0, 500)}` }] }],
             generationConfig: {
               responseModalities: ["AUDIO"],
               speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: "Kore" } } },
