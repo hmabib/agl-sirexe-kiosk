@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
+import Link from "next/link";
 
 // /demo — autoplay 75s : mine → équipement → incident → multimodal → port → navire
 const STEPS = [
@@ -31,7 +32,7 @@ export default function DemoPage() {
       <div className="flex gap-2 mt-10">
         {STEPS.map((_, j) => <div key={j} className={`h-2 w-16 rounded-full ${j <= i ? "bg-[#D6A84B]" : "bg-white/15"}`} />)}
       </div>
-      <a href="/" className="mt-8 h-14 px-8 rounded-2xl bg-white/10 font-bold flex items-center">✕ Quitter la démo</a>
+      <Link href="/" className="mt-8 h-14 px-8 rounded-2xl bg-white/10 font-bold flex items-center">✕ Quitter la démo</Link>
     </div>
   );
 }

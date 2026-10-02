@@ -1,0 +1,7 @@
+.git/
+.env*
+node_modules/
+.next/
+test-results/
+playwright-report/
+public/assets/template/contact-sheet.jpg

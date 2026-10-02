@@ -1,0 +1,8 @@
+import { Type, type FunctionDeclaration } from "@google/genai";
+import { ALLOWED_SCREENS } from "./actions";
+export const AGL_TOOLS: FunctionDeclaration[] = [
+  { name:"navigate",description:"Ouvre le parcours demandé sur la borne AGL.",parameters:{type:Type.OBJECT,properties:{screen:{type:Type.STRING,enum:ALLOWED_SCREENS}},required:["screen"]}},
+  { name:"show_route",description:"Affiche une fiche cartographique interactive d’un corridor illustratif de Côte d’Ivoire. A Abidjan-Korhogo, B Abidjan-Ferkessédougou, C San Pedro-Man.",parameters:{type:Type.OBJECT,properties:{route:{type:Type.STRING,enum:["route-A","route-B","route-C"]}},required:["route"]}},
+  { name:"show_mining",description:"Ouvre le parcours Mining sur une étape précise du cycle minier.",parameters:{type:Type.OBJECT,properties:{stage:{type:Type.STRING,enum:["exploration","construction","production","export","closure"]}},required:["stage"]}},
+  { name:"open_brief",description:"Matérialise une fiche explicative ou un schéma de chaîne logistique demandé par le visiteur. Contenu professionnel, court, pas de chiffres inventés.",parameters:{type:Type.OBJECT,properties:{title:{type:Type.STRING},body:{type:Type.STRING}},required:["title","body"]}},
+];

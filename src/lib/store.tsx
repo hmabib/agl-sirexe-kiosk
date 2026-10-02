@@ -5,7 +5,8 @@ import { AGL_SYSTEM_PROMPT } from "./prompt";
 
 export { AGL_SYSTEM_PROMPT };
 
-export type Screen = "attract" | "home" | "mission" | "explore" | "build" | "vision" | "finale";
+export type Screen = "attract" | "home" | "games" | "mission" | "explore" | "build" | "vision" | "mining" | "corporate" | "appointment" | "careers" | "quotation" | "satisfaction" | "market" | "finale";
+export const SCREEN_PATHS: Record<Screen, string> = { attract: "/", home: "/accueil", games: "/experiences", mission: "/mission", explore: "/explore", build: "/build", vision: "/vision", mining: "/mining", corporate: "/presentation", appointment: "/rendez-vous", careers: "/emploi", quotation: "/cotation", satisfaction: "/satisfaction", market: "/performance", finale: "/resultats" };
 
 export interface ExperienceContext {
   experience: string;
@@ -23,6 +24,7 @@ export interface ExperienceContext {
   metrics?: Record<string, string | number>;
   zoom?: number;
   timestamp: string;
+  details?: Record<string, unknown>;
 }
 
 interface KioskState {
@@ -70,12 +72,16 @@ interface KioskState {
   getExperienceContext: () => ExperienceContext;
   touch: () => void;
   lastTouch: number;
+  contextDetails: Record<string, unknown>;
+  setContextDetails: (d: Record<string, unknown>) => void;
+  pendingQuestion: string;
+  requestAI: (question: string) => void;
 }
 
 const Ctx = createContext<KioskState | null>(null);
 
-export function KioskProvider({ children }: { children: React.ReactNode }) {
-  const [screen, setScreen] = useState<Screen>("attract");
+export function KioskProvider({ children, initialScreen = "attract" }: { children: React.ReactNode; initialScreen?: Screen }) {
+  const [screen, setScreen] = useState<Screen>(initialScreen);
   const [lang, setLang] = useState<Lang>("fr");
   const [kioskZoom, setKioskZoom] = useState(1);
   const [soundOn, setSoundOn] = useState(true);
@@ -93,9 +99,11 @@ export function KioskProvider({ children }: { children: React.ReactNode }) {
   const [aiState, setAiState] = useState<"idle" | "listening" | "thinking" | "speaking">("idle");
   const [lastAiReply, setLastAiReply] = useState("");
   const [finaleStats, setFinaleStats] = useState<Record<string, string | number> | null>(null);
-  const [lastTouch, setLastTouch] = useState(Date.now());
+  const [lastTouch, setLastTouch] = useState(()=>Date.now());
+  const [contextDetails, setContextDetails] = useState<Record<string, unknown>>({});
+  const [pendingQuestion, setPendingQuestion] = useState("");
   const screenRef = useRef(screen);
-  screenRef.current = screen;
+  useEffect(()=>{screenRef.current=screen;},[screen]);
 
   const touch = useCallback(() => {
     setLastTouch(Date.now());
@@ -108,11 +116,14 @@ export function KioskProvider({ children }: { children: React.ReactNode }) {
   // Auto-reset 60s -> confirm -> attract
   useEffect(() => {
     const id = setInterval(() => {
-      if (screenRef.current !== "attract" && Date.now() - lastTouch > 55000) {
+      const longSession = ["satisfaction", "quotation", "appointment", "careers", "vision"].includes(screenRef.current);
+      if (screenRef.current !== "attract" && Date.now() - lastTouch > (longSession ? 300000 : 90000)) {
         setScreen("attract");
         setCargo(null); setScenario(null); setRoute(null); setIncident(null);
         setSelectedNode(null); setCorridor([]); setCorridorActive(false);
         setAiOpen(false); setAiState("idle");
+        setLastAiReply(""); setContextDetails({}); setFinaleStats(null);
+        window.history.replaceState(null, "", "/");
         logEvent("session_reset_idle", {});
       }
     }, 5000);
@@ -122,8 +133,15 @@ export function KioskProvider({ children }: { children: React.ReactNode }) {
   const go = useCallback((s: Screen) => {
     logEvent(s === "attract" ? "session_started" : "experience_selected", { screen: s });
     setScreen(s);
+    setContextDetails({});
+    window.history.pushState(null, "", SCREEN_PATHS[s]);
     setLastTouch(Date.now());
   }, []);
+  useEffect(() => {
+    const pop = () => { const entry = Object.entries(SCREEN_PATHS).find(([,p])=> p === window.location.pathname); if(entry) { setScreen(entry[0] as Screen); setLastTouch(Date.now()); } };
+    window.addEventListener("popstate", pop); return () => window.removeEventListener("popstate", pop);
+  }, []);
+  const requestAI = useCallback((question: string) => { setPendingQuestion(`${Date.now()}::${question}`); setAiOpen(true); setLastTouch(Date.now()); }, []);
 
   const getExperienceContext = useCallback((): ExperienceContext => {
     return {
@@ -132,7 +150,7 @@ export function KioskProvider({ children }: { children: React.ReactNode }) {
       cargo: cargo ?? undefined,
       origin: scenarioOrigin(scenario),
       destination: scenarioDest(scenario),
-      transportMode: route ? [route] : ["road"],
+      transportMode: route === "route-B" ? ["road", "rail", "sea"] : ["road", "sea"],
       currentScreen: screenRef.current,
       selectedScenario: scenario ?? undefined,
       selectedNode: selectedNode ?? undefined,
@@ -140,8 +158,9 @@ export function KioskProvider({ children }: { children: React.ReactNode }) {
       incident,
       zoom: kioskZoom,
       timestamp: new Date().toISOString(),
+      details: contextDetails,
     };
-  }, [lang, cargo, scenario, route, selectedNode, corridor, incident, kioskZoom]);
+  }, [lang, cargo, scenario, route, selectedNode, corridor, incident, kioskZoom, contextDetails]);
 
   const value = useMemo<KioskState>(
     () => ({
@@ -153,8 +172,9 @@ export function KioskProvider({ children }: { children: React.ReactNode }) {
       aiOpen, setAiOpen, aiSpeaking, setAiSpeaking, aiState, setAiState,
       lastAiReply, setLastAiReply, finaleStats, setFinaleStats,
       getExperienceContext, touch, lastTouch,
+      contextDetails, setContextDetails, pendingQuestion, requestAI,
     }),
-    [screen, lang, go, kioskZoom, soundOn, cargo, scenario, route, incident, selectedNode, xray, dataView, corridor, corridorActive, aiOpen, aiSpeaking, aiState, lastAiReply, finaleStats, getExperienceContext, touch, lastTouch]
+    [screen, lang, go, kioskZoom, soundOn, cargo, scenario, route, incident, selectedNode, xray, dataView, corridor, corridorActive, aiOpen, aiSpeaking, aiState, lastAiReply, finaleStats, getExperienceContext, touch, lastTouch, contextDetails, pendingQuestion, requestAI]
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
@@ -183,7 +203,8 @@ export function logEvent(name: string, data: Record<string, unknown>) {
   try {
     const raw = localStorage.getItem("agl_analytics") ?? "[]";
     const arr = JSON.parse(raw);
-    arr.push({ name, data, ts: new Date().toISOString() });
+    const { text: _text, ctx: _ctx, context: _context, ...anonymous } = data;
+    arr.push({ name, data: anonymous, ts: new Date().toISOString() });
     localStorage.setItem("agl_analytics", JSON.stringify(arr.slice(-500)));
   } catch {}
 }

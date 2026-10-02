@@ -1,4 +1,6 @@
 "use client";
+/* R3F intentionally mutates Three.js objects in the render loop. */
+/* eslint-disable react-hooks/immutability */
 import { useMemo, useRef } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
 import * as THREE from "three";

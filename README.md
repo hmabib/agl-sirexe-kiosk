@@ -1,51 +1,81 @@
-# AGL × SIREXE — Borne immersive kiosk
+# AGL × SIREXE — Borne immersive
 
-Expérience tactile premium (Next.js + Tailwind + Framer Motion + SVG + Gemini/Mistral Live).
+Borne tactile Next.js, React et Tailwind : Mining, logistique, présentation AGL, préparation de rendez-vous et candidatures, cotation et enquête de satisfaction.
 
 ## Lancement
 
 ```bash
 npm install
-cp .env.example .env.local   # renseignez GEMINI_API_KEY (ou clé Mistral AQ.…)
-npm run dev                   # http://localhost:3000
+cp .env.example .env.local
+# Renseigner les clés serveur dans .env.local.
+npm run dev
 ```
 
-## Variables d'environnement
+## Variables d’environnement
 
-| Var | Rôle |
+| Variable | Usage |
 |---|---|
-| `GEMINI_API_KEY` | Clé Gemini (format `AIza…` **ou** `AQ.…`, les deux acceptés). Jamais exposée : utilisée uniquement dans `/api/gemini` côté serveur (query `?key=` + header `X-goog-api-key`). |
-| `GEMINI_MODEL` | Dernier modèle texte : `gemini-3.8-flash` (GA sept. 2026, 1M ctx, thinking LOW). Fallback auto → `gemini-3.7-flash` → `gemini-2.5-flash`. |
-| `GEMINI_LIVE_MODEL` | Voix temps réel : `gemini-3.8-live` (natif audio, barge-in, 24 langues, transcription). |
-| `GEMINI_TTS_MODEL` | Voix studio serveur `/api/tts` (`gemini-3.8-flash-tts`, repli navigateur si 503). |
-| `NEXT_PUBLIC_ADMIN_PW` | Mot de passe `/admin` (défaut `agl2026`). |
+| `GEMINI_API_KEY` | Clé serveur Gemini, jamais envoyée au navigateur. Aucun routage selon son préfixe. |
+| `GEMINI_MODEL` | Modèle texte/image configuré ; repli `gemini-flash-latest` en cas d’indisponibilité. |
+| `GEMINI_LIVE_MODEL` | Modèle compatible Live API pour l’audio natif et les images caméra. |
+| `GEMINI_TTS_MODEL` | Modèle audio pour la lecture serveur des réponses texte ; synthèse navigateur en repli. |
+| `MISTRAL_API_KEY` | Alternative texte uniquement si aucune clé Gemini n’est configurée. |
+| `NEXT_PUBLIC_ADMIN_PW` | Verrou d’interface `/admin`, vérifié côté client ; ne constitue pas une authentification serveur. |
 
-> ⚠️ `gemini-2.0-flash` est **éteint depuis juin 2026**, `mistral-medium-2505/2508` sont **dépréciés** → la borne utilise désormais `gemini-3.8-flash` + `mistral-medium-latest` avec chaînes de repli automatiques.
+Les noms de modèles sont configurables et leur disponibilité dépend du compte fournisseur. Un badge « configuré » indique la présence d’une clé, pas une connexion Live vérifiée. Les fichiers `.env*` contenant les valeurs et `.vercel/` sont exclus de Git.
 
-La clé fournie (`AQ.Ab8RN6Ip…`) est une clé **Mistral** : collez-la dans `GEMINI_API_KEY`, l'API route la détecte et appelle Mistral automatiquement. Pour Gemini Live temps réel, ajoutez une clé `AIza…` et `GEMINI_MODEL=gemini-live-2.5-flash`.
+## Parcours
 
-## Parcours borne
+| Route | Expérience |
+|---|---|
+| `/` | Écran d’arrivée, carte géographique de l’Afrique et Côte d’Ivoire mise en évidence |
+| `/accueil` | Choix des intentions et accès Mining |
+| `/experiences` | Mission Control, Explore, Build et Vision Lab |
+| `/mining` | Cycle minier, cas Tokadeh Phase II et quiz |
+| `/mission`, `/explore`, `/build` | Simulations logistiques interactives |
+| `/vision` | Caméra opt-in, détection locale et conversation Gemini Live |
+| `/presentation` | Expertises AGL et fiche téléchargeable |
+| `/rendez-vous`, `/emploi` | Préparation de demandes locales et téléchargement JSON |
+| `/cotation` | Formulaire officiel AGL, lien direct et QR code |
+| `/satisfaction` | Enquête officielle Microsoft Forms, lien direct et QR code |
+| `/performance` | Croissance du PIB CI sourcée Banque mondiale et simulation séparée |
+| `/resultats` | Résultats et passage vers l’enquête |
+| `/admin` | Demandes locales, export CSV et analytics |
+| `/demo` | Démonstration automatique |
 
-- `/` — attract (particules dorées canvas, 45–55 s idle → reset) → accueil → Mission Control / Explore / Build → finale + lead.
-- `/demo` — autoplay VIP 75 s (mine → 80 t → incident → multimodal → port → navire).
-- `/admin` — config (modèle, idle, toggles) + analytics anonymes.
-- Logo : remplacez `public/assets/agl-logo.svg` par `agl-logo.png` officiel (le composant accepte les deux).
+Les boutons de fin d’expérience mènent à `/satisfaction`. Les formulaires externes proposent un lien direct et un QR code si leur hébergement empêche l’intégration en iframe.
 
-## Kiosk
+## Données et limites
 
-- Plein écran auto au premier toucher, scrollbars masquées, zones tactiles ≥ 64 px, zoom kiosque 100–140 % (bouton ⤢), zoom +/- sur chaque carte SVG, pinch via trackpad.
-- FR/EN, 🔊 toggle, micro flottant + 👁️ ASK WHAT YOU SEE (contexte écran envoyé à l'IA), caméra OFF par défaut (opt-in), orb LISTENING/THINKING/SPEAKING.
-- **Streaming SSE** (`/api/gemini/stream`) : réponse écrite mot-à-mot + voix studio serveur (`/api/tts`, repli local). Badge modèle branché visible (TopBar + assistant + admin).
-- **WOW** : champ de particules, confettis dorés, anneau de score corridor/mission, comparatif animé A/B/C, live feed corridor, sound design WebAudio + nappe d'ambiance, **globe 3D temps réel** (Three.js, ports + arcs animés, point CI cliquable), ripples tactiles, flash warp entre écrans, alerte idle « Touchez pour continuer », bandeau KPI compteurs, chrono mission, moteur de calcul cargaison×scénario×route×incident, final Build en révélation séquentielle.
-- Offline partiel : sans clé, l'IA répond en mode mock « AGL AI momentanément indisponible », les 3 expériences restent jouables.
+- Les rendez-vous et candidatures sont stockés dans le navigateur de la borne et exportables en JSON/CSV. Aucune réservation, transmission RH ou synchronisation CRM n’est réalisée.
+- Les contours de l’Afrique proviennent de Natural Earth. Les fonds interactifs utilisent OpenStreetMap/CARTO ; un mode vectoriel sert de repli si les tuiles sont indisponibles.
+- Les liaisons, scores, délais, coûts, CO₂ et impacts des jeux sont illustratifs. Les villes sont réelles ; la faisabilité d’un transport exige une étude de route.
+- Le cas Tokadeh reprend les éléments documentaires AGL : concentrateur à Tokadeh, chargeur à Buchanan et 34 navires affrétés déchargés. Les visuels du template sont des illustrations métier.
+- `/api/market` récupère la croissance annuelle réelle du PIB de la Côte d’Ivoire, indicateur Banque mondiale `NY.GDP.MKTP.KD.ZG`. En cas d’indisponibilité, aucune donnée de substitution n’est inventée.
+- Les demandes micro/caméra sont explicites. Les flux sont arrêtés à la fermeture. L’application n’enregistre pas les conversations ni les vidéos ; l’IA reçoit les données nécessaires pendant leur utilisation.
+- Réinitialisation après 90 secondes d’inactivité, portée à 300 secondes pour les formulaires et Vision Lab.
 
-## Build / Vercel
+## IA
+
+`/api/gemini/stream` utilise le streaming natif du SDK Google et les derniers tours de conversation. Le contexte de l’écran et `knowledge/*.md` sont inclus dans les instructions. Les outils autorisés peuvent ouvrir un parcours, afficher un corridor ou une fiche téléchargeable.
+
+`/api/live/token` crée un jeton éphémère à usage unique. Le navigateur utilise ce jeton pour la Live API : micro PCM16/16 kHz, audio de sortie 24 kHz, transcriptions et images caméra réduites. La clé permanente reste côté serveur. HTTPS ou localhost et les autorisations navigateur sont nécessaires.
+
+## Charte et ressources
+
+Charte extraite du template commercial fourni : bleu `#1B365F`, or `#EED58E`, Arial. Logo officiel extrait : `public/assets/template/image6.svg`. Les médias sont dans `public/assets/template/` ; les scripts d’extraction et de géographie sont dans `scripts/`.
+
+## Vérification et publication
 
 ```bash
-npm run build && npm start
+npm run lint
+npx tsc --noEmit
+npm run build
+npm run start -- --port 3120
+# Dans un second terminal, navigateur Chromium Playwright installé :
+npm run test:e2e
 ```
-Déployez sur Vercel, renseignez les env vars dans le dashboard. `knowledge/` : ajoutez vos .md AGL (V2 : injection RAG dans le system prompt).
 
-## Micro / caméra
+Les tests navigateur vérifient les parcours, exports, liens/QR codes, responsive et libération caméra. Les scénarios IA sont mockés : un contrôle fournisseur réel séparé est nécessaire pour valider Gemini Live.
 
-Navigateur : autoriser micro + caméra (HTTPS ou localhost). Voix : SpeechRecognition + synthèse vocale ; streaming texte via `/api/gemini`.
+Déploiement : configurer les variables Production du projet Vercel, puis `vercel --prod`. `next.config.ts` inclut `knowledge/` dans le tracing serveur.

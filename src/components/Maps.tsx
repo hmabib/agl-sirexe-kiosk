@@ -199,6 +199,8 @@ export function WestAfricaMap({
   return (
     <svg
       viewBox="0 0 640 420"
+      role="img"
+      aria-label="Carte de simulation hors ligne"
       className="w-full h-full"
       onClick={(e) => {
         const rect = (e.currentTarget as SVGSVGElement).getBoundingClientRect();

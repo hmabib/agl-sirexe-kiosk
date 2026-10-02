@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useKiosk, logEvent } from "@/lib/store";
 import { TopBar } from "./Chrome";
@@ -10,7 +10,7 @@ import { ConfettiBurst, ScoreRing, sfx } from "./Fx";
 
 const RealWestAfrica = dynamic(() => import("./RealMaps").then((m) => m.RealWestAfrica), {
   ssr: false,
-  loading: () => <div className="h-[420px] flex items-center justify-center text-[#D6A84B] animate-pulse">🌍 Chargement de la vraie carte…</div>,
+  loading: () => <div className="h-[420px] md:h-[460px] flex items-center justify-center text-[#D6A84B] animate-pulse">🌍 Chargement de la vraie carte…</div>,
 });
 
 const PALETTE = ["MINE", "ENERGY", "INDUSTRY", "LOGISTICS HUB", "RAIL", "ROAD", "PORT", "MARITIME ROUTE", "WAREHOUSE"];
@@ -21,6 +21,10 @@ export function BuildScreen() {
   const [placed, setPlaced] = useState<PlacedPoint[]>([]);
   const [countdown, setCountdown] = useState<number | null>(null);
   const [wowStep, setWowStep] = useState(0);
+  const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
+  useEffect(()=>()=>timers.current.forEach(clearTimeout),[]);
+  useEffect(()=>{k.setContextDetails({placed,selectedItem:selected,simulation:true});},[placed,selected,k.setContextDetails]);
+  const schedule=(f:()=>void,ms:number)=>timers.current.push(setTimeout(f,ms));
 
   function place(lat: number, lng: number) {
     const np = [...placed, { id: selected, lat: +lat.toFixed(3), lng: +lng.toFixed(3) }];
@@ -37,12 +41,12 @@ export function BuildScreen() {
     setWowStep(0);
     logEvent("build_africa_completed", { corridor: placed.map((p) => p.id) });
     const seq = [3, 2, 1];
-    seq.forEach((n, i) => setTimeout(() => setCountdown(n), i * 900));
-    setTimeout(() => {
+    seq.forEach((n, i) => schedule(() => setCountdown(n), i * 900));
+    schedule(() => {
       setCountdown(null); k.setCorridorActive(true); sfx("success");
-      [1, 2, 3, 4].forEach((s, i) => setTimeout(() => { setWowStep(s); sfx("whoosh"); }, 900 + i * 1400));
+      [1, 2, 3, 4].forEach((s, i) => schedule(() => { setWowStep(s); sfx("whoosh"); }, 900 + i * 1400));
     }, 2800);
-    setTimeout(() => { k.setFinaleStats({ Maillons: placed.length, Corridor: "ACTIF ⚡", Score: Math.min(98, 18 + placed.length * 11 + new Set(placed.map((p) => p.id)).size * 4) }); k.go("finale"); }, 10500);
+    schedule(() => { k.setFinaleStats({ Maillons: placed.length, Corridor: "ACTIF ⚡", Score: Math.min(98, 18 + placed.length * 11 + new Set(placed.map((p) => p.id)).size * 4) }); k.go("satisfaction"); }, 10500);
   }
 
   return (
@@ -89,15 +93,7 @@ export function BuildScreen() {
                 ⚡ ACTIVER LE CORRIDOR
               </button>
             )}
-            <button onClick={async () => {
-              k.setAiOpen(true);
-              try {
-                const m = localStorage.getItem("agl_model") || undefined;
-                const r = await fetch("/api/gemini", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ message: `Analyse ce corridor construit par le visiteur : ${placed.map((p) => p.id).join(" → ")}. Donne un avis pro en <100 mots + ce qu'AGL pourrait apporter.`, context: k.getExperienceContext(), lang: k.lang, model: m }) });
-                const d = await r.json();
-                k.setLastAiReply(d.reply ?? "");
-              } catch {}
-            }} className="w-full h-14 rounded-2xl bg-white/10 font-bold border border-[#D6A84B]/30">🤖 AGL AI ANALYSE MON CORRIDOR</button>
+            <button onClick={() => k.requestAI(`Analyse mon corridor : ${placed.map(p=>`${p.id} (${p.lat}, ${p.lng})`).join(" → ")}. Quelles sont ses forces et quelles vérifications sont nécessaires ?`)} className="w-full h-14 rounded-2xl bg-white/10 font-bold border border-[#D6A84B]/30">🤖 AGL AI ANALYSE MON CORRIDOR</button>
             {k.lastAiReply && <div className="rounded-2xl bg-[#003F73]/60 border border-[#D6A84B]/40 p-4 text-sm">🤖 {k.lastAiReply}</div>}
           </div>
         </div>

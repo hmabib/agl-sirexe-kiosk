@@ -1,239 +1,30 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
+import { Mic, MicOff, X, Send, Eye, Camera, VolumeX } from "lucide-react";
 import { useKiosk, logEvent } from "@/lib/store";
+import { useGeminiLive } from "@/lib/use-gemini-live";
+import { askStream, playServerVoice, stopServerVoice, preferredModel } from "@/lib/live";
 import { Orb } from "./Orb";
-import { ModelBadge, sfx } from "./Fx";
-import { askStream, playServerVoice, preferredModel } from "@/lib/live";
 
-interface Msg { role: "user" | "ai"; text: string }
-
-export function AIAssistant() {
-  const k = useKiosk();
-  const [msgs, setMsgs] = useState<Msg[]>([
-    { role: "ai", text: "Bonjour, je suis AGL AI. Touchez le micro et demandez-moi ce que vous voyez, le meilleur trajet, ou ce qu'AGL ferait ici." },
-  ]);
-  const [input, setInput] = useState("");
-  const [cameraOn, setCameraOn] = useState(false);
-  const [photo, setPhoto] = useState<string | null>(null);
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const recRef = useRef<any>(null);
-  const scrollRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    scrollRef.current?.scrollTo({ top: 99999, behavior: "smooth" });
-  }, [msgs, k.aiState]);
-
-  // Voix studio serveur (Gemini TTS) -> repli navigateur
-  async function speak(text: string, meta?: { provider: string; model: string }) {
-    try {
-      k.setAiState("speaking");
-      const serverOk = await playServerVoice(text, k.lang);
-      if (!serverOk) {
-        speechSynthesis.cancel();
-        const u = new SpeechSynthesisUtterance(text.slice(0, 400));
-        u.lang = k.lang === "en" ? "en-US" : "fr-FR";
-        u.rate = 1.02;
-        await new Promise<void>((resolve) => {
-          u.onend = () => resolve();
-          u.onerror = () => resolve();
-          speechSynthesis.speak(u);
-          setTimeout(resolve, 25000);
-        });
-      }
-    } catch { /* silencieux */ }
-    k.setAiState("idle");
+interface Msg { role:"user"|"ai"; text:string }
+export function AIAssistant(){
+  const k=useKiosk();const en=k.lang==="en";const [messages,setMessages]=useState<Msg[]>([]);const [input,setInput]=useState("");const [busy,setBusy]=useState(false);const [status,setStatus]=useState("");const bottom=useRef<HTMLDivElement>(null);const controller=useRef<AbortController|null>(null);const busyRef=useRef(false);const msgs=useRef(messages);msgs.current=messages;const current=useRef(k);current.current=k;const pending=useRef("");const liveUser=useRef(-1);const liveReply=useRef(-1);
+  const live=useGeminiLive({lang:k.lang,getContext:()=>current.current.getExperienceContext(),onActivity:()=>current.current.touch(),onUser:(text)=>{if(liveUser.current<0){liveUser.current=msgs.current.length;setMessages(m=>[...m,{role:"user",text}]);}else setMessages(m=>m.map((v,i)=>i===liveUser.current?{role:"user",text}:v));},onReply:(text,done)=>{if(text){if(liveReply.current<0){liveReply.current=msgs.current.length;setMessages(m=>[...m,{role:"ai",text}]);}else setMessages(m=>m.map((v,i)=>i===liveReply.current?{role:"ai",text}:v));}if(done){liveReply.current=-1;liveUser.current=-1;}}});
+  useEffect(()=>{bottom.current?.scrollIntoView({behavior:"smooth"});},[messages]);
+  useEffect(()=>{const state=live.phase==="connecting"?"thinking":live.phase;k.setAiState(state);},[live.phase,k.setAiState]);
+  useEffect(()=>{if(k.pendingQuestion&&pending.current!==k.pendingQuestion){pending.current=k.pendingQuestion;void ask(k.pendingQuestion.replace(/^\d+::/,""));}},[k.pendingQuestion]);
+  useEffect(()=>()=>{controller.current?.abort();stopServerVoice();},[]);
+  useEffect(()=>{if(!k.aiOpen){live.stop();controller.current?.abort();stopServerVoice();}},[k.aiOpen]);
+  const greetings=en?"Hi, I’m AGL AI. Ask me about Mining, show a corridor or prepare your next step with AGL.":"Bonjour, je suis AGL AI. Parlons Mining, affichons un corridor ou préparons votre prochaine étape avec AGL.";
+  async function ask(text:string){
+    if(!text.trim()||busyRef.current)return;live.stop();stopServerVoice();k.touch();busyRef.current=true;setBusy(true);setInput("");setStatus(en?"Connecting to Gemini…":"Connexion à Gemini…");k.setAiState("thinking");logEvent("ai_question",{screen:k.screen});
+    const history=msgs.current.slice(-12);const index=history.length;setMessages([...history,{role:"user",text},{role:"ai",text:""}]);const abort=new AbortController();controller.current=abort;
+    try{const meta=await askStream({message:text,context:k.getExperienceContext(),history,lang:k.lang,model:preferredModel()},full=>{setStatus(en?"Gemini is answering":"Gemini répond");setMessages(m=>m.map((v,i)=>i===index+1?{role:"ai",text:full}:v));},abort.signal);if(abort.signal.aborted)return;setMessages(m=>m.map((v,i)=>i===index+1?{role:"ai",text:meta.reply}:v));k.setLastAiReply(meta.reply);setStatus(meta.degraded?(en?"AI unavailable — experiences remain accessible":"IA indisponible — les expériences restent accessibles"):`${meta.model}`);if(k.soundOn&&!meta.degraded){k.setAiState("speaking");const ok=await playServerVoice(meta.reply,k.lang);if(!ok&&!abort.signal.aborted&&typeof speechSynthesis!=="undefined"){const u=new SpeechSynthesisUtterance(meta.reply);u.lang=en?"en-US":"fr-FR";speechSynthesis.speak(u);}}}
+    catch{if(!abort.signal.aborted){setStatus(en?"Connection unavailable. Please try again.":"Connexion indisponible. Réessayez dans un instant.");setMessages(m=>m.filter((v,i)=>i!==index+1||v.text));}}
+    finally{busyRef.current=false;setBusy(false);k.setAiState("idle");}
   }
-
-  // Streaming temps réel : la réponse s'écrit au fil de l'eau
-  async function ask(text: string, opts?: { whatYouSee?: boolean }) {
-    if (!text.trim()) return;
-    const userText = opts?.whatYouSee ? `Explique-moi ce que je vois. Contexte écran : ${JSON.stringify(k.getExperienceContext())}. Question : ${text}` : text;
-    setMsgs((m) => [...m, { role: "user", text }]);
-    setInput("");
-    k.setAiState("thinking");
-    sfx("whoosh");
-    logEvent("ai_question", { text: text.slice(0, 200), ctx: k.getExperienceContext() });
-    const aiIndex: number = -1;
-    void aiIndex;
-    setMsgs((m) => [...m, { role: "ai", text: "▍" }]);
-    try {
-      const meta = await askStream(
-        {
-          message: userText,
-          context: k.getExperienceContext(),
-          image: photo ?? undefined,
-          lang: k.lang,
-          model: preferredModel(),
-        },
-        (full) => {
-          setMsgs((m) => {
-            const c = [...m];
-            c[c.length - 1] = { role: "ai", text: full + "▍" };
-            return c;
-          });
-        }
-      );
-      const finalReply = meta.reply || "AGL AI est momentanément indisponible. Les expériences restent accessibles.";
-      setMsgs((m) => {
-        const c = [...m];
-        c[c.length - 1] = { role: "ai", text: finalReply };
-        return c;
-      });
-      k.setLastAiReply(finalReply);
-      logEvent("voice_used", { mode: "text", provider: meta.provider, model: meta.model });
-      speak(finalReply, { provider: meta.provider, model: meta.model });
-    } catch {
-      const fallback = "AGL AI est momentanément indisponible. Je peux toutefois vous guider : suivez le flux doré, du site vers le port puis le navire.";
-      setMsgs((m) => [...m, { role: "ai", text: fallback }]);
-      k.setAiState("idle");
-    }
-  }
-
-  function startVoice() {
-    k.touch();
-    const SR: any = (window as any).webkitSpeechRecognition || (window as any).SpeechRecognition;
-    if (!SR) {
-      // fallback: simulate listening 2s then prompt typed
-      k.setAiState("listening");
-      setTimeout(() => k.setAiState("idle"), 2000);
-      return;
-    }
-    try { recRef.current?.stop(); } catch {}
-    const rec = new SR();
-    rec.lang = k.lang === "en" ? "en-US" : "fr-FR";
-    rec.interimResults = false;
-    k.setAiState("listening");
-    logEvent("voice_used", { mode: "mic" });
-    rec.onresult = (e: any) => {
-      const txt = e.results?.[0]?.[0]?.transcript ?? "";
-      if (txt) ask(txt);
-    };
-    rec.onend = () => { if (k.aiState === "listening") k.setAiState("idle"); };
-    rec.onerror = () => k.setAiState("idle");
-    recRef.current = rec;
-    rec.start();
-    // auto stop 8s
-    setTimeout(() => { try { rec.stop(); } catch {} }, 8000);
-  }
-
-  async function enableCamera() {
-    try {
-      const s = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
-      setCameraOn(true);
-      setTimeout(() => { if (videoRef.current) videoRef.current.srcObject = s; }, 200);
-    } catch { alert("Caméra indisponible sur cette borne."); }
-  }
-
-  function capturePhoto() {
-    try {
-      const v = videoRef.current;
-      if (!v) return;
-      const c = document.createElement("canvas");
-      c.width = v.videoWidth; c.height = v.videoHeight;
-      c.getContext("2d")?.drawImage(v, 0, 0);
-      setPhoto(c.toDataURL("image/jpeg", 0.7));
-    } catch {}
-  }
-
-  const suggestions = [
-    "Qu'est-ce que je regarde ?",
-    "Pourquoi ce trajet ?",
-    "Que ferait AGL ici ?",
-    "80 tonnes : route ou rail ?",
-    "Impact environnemental ?",
-  ];
-
-  return (
-    <>
-      {/* floating mic + ask-what-you-see */}
-      <div className="fixed bottom-6 right-6 z-40 flex flex-col items-end gap-3">
-        <button
-          onClick={() => { k.touch(); ask(k.lang === "fr" ? "Explique-moi ce que je vois." : "Explain what I see.", { whatYouSee: true }); k.setAiOpen(true); }}
-          className="touch-target glass rounded-full px-5 h-16 flex items-center gap-2 text-sm font-bold text-[#F2D28B]"
-        >
-          👁️🎙️ {k.lang === "fr" ? "ASK WHAT YOU SEE" : "ASK WHAT YOU SEE"}
-        </button>
-        <button
-          onClick={() => { k.setAiOpen(true); startVoice(); }}
-          className="halo-btn touch-target rounded-full w-20 h-20 bg-gradient-to-br from-[#D6A84B] to-[#8a6420] text-3xl shadow-2xl"
-          aria-label="Parler à AGL AI"
-        >
-          🎙️
-        </button>
-      </div>
-
-      <AnimatePresence>
-        {k.aiOpen && (
-          <motion.div
-            initial={{ x: 480, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: 480, opacity: 0 }}
-            transition={{ type: "spring", damping: 28, stiffness: 260 }}
-            className="fixed top-0 right-0 h-full w-full max-w-[440px] z-50 glass border-l border-[#D6A84B]/40 flex flex-col"
-          >
-            <div className="p-5 flex items-center justify-between border-b border-white/10">
-              <div className="flex items-center gap-3">
-                <Orb state={k.aiState} size={54} />
-                <div>
-                  <div className="font-extrabold tracking-widest">AGL AI</div>
-                  <div className="text-xs text-[#F2D28B]">
-                    {k.aiState === "listening" ? (k.lang === "fr" ? "Je vous écoute…" : "I'm listening…") : k.aiState === "thinking" ? (k.lang === "fr" ? "Analyse en cours…" : "Thinking…") : k.aiState === "speaking" ? "● speaking" : "● online"}
-                  </div>
-                  <div className="mt-1 flex"><ModelBadge /></div>
-                </div>
-              </div>
-              <button onClick={() => { k.setAiOpen(false); try { speechSynthesis.cancel(); } catch {} k.setAiState("idle"); }} className="touch-target w-12 h-12 rounded-full bg-white/10 text-xl">✕</button>
-            </div>
-
-            <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-3 kiosk-scroll">
-              {msgs.map((m, i) => (
-                <div key={i} className={`max-w-[90%] rounded-2xl px-4 py-3 text-[15px] leading-relaxed ${m.role === "ai" ? "bg-[#003F73]/70 border border-[#D6A84B]/30" : "ml-auto bg-[#D6A84B] text-[#001D3D] font-semibold"}`}>
-                  {m.text}
-                </div>
-              ))}
-              {k.aiState === "thinking" && <div className="text-sm text-white/60 animate-pulse">⚡ Le dernier modèle analyse le contexte écran en streaming…</div>}
-              {cameraOn && (
-                <div className="rounded-2xl overflow-hidden border border-[#D6A84B]/40">
-                  <video ref={videoRef} autoPlay playsInline className="w-full h-48 object-cover bg-black" />
-                  <div className="flex gap-2 p-2">
-                    <button onClick={capturePhoto} className="flex-1 h-12 rounded-xl bg-[#D6A84B] text-[#001D3D] font-bold">📸 Capturer</button>
-                    <button onClick={() => setCameraOn(false)} className="h-12 px-4 rounded-xl bg-white/10">Off</button>
-                  </div>
-                  {photo && <div className="p-2 text-xs text-emerald-300">✓ Image jointe — posez votre question, Gemini la verra.</div>}
-                </div>
-              )}
-            </div>
-
-            <div className="p-4 border-t border-white/10 space-y-3">
-              <div className="flex gap-2 overflow-x-auto pb-1">
-                {suggestions.map((s) => (
-                  <button key={s} onClick={() => ask(s)} className="shrink-0 text-xs px-3 h-10 rounded-full bg-white/10 border border-white/15 hover:border-[#D6A84B]">
-                    {s}
-                  </button>
-                ))}
-              </div>
-              <div className="flex gap-2">
-                <button onClick={startVoice} className={`touch-target w-16 h-16 rounded-2xl text-2xl ${k.aiState === "listening" ? "bg-red-500 animate-pulse" : "bg-gradient-to-br from-[#D6A84B] to-[#8a6420]"}`}>🎙️</button>
-                <input
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === "Enter") ask(input); }}
-                  placeholder={k.lang === "fr" ? "Écrivez ou parlez…" : "Type or speak…"}
-                  className="flex-1 h-16 rounded-2xl bg-black/40 border border-white/15 px-4 outline-none focus:border-[#D6A84B]"
-                />
-                <button onClick={() => ask(input)} className="touch-target w-16 h-16 rounded-2xl bg-white text-[#001D3D] text-xl font-bold">➤</button>
-              </div>
-              <div className="flex gap-2 text-xs">
-                <button onClick={cameraOn ? capturePhoto : enableCamera} className="flex-1 h-11 rounded-xl bg-white/10 border border-white/15">
-                  📷 {cameraOn ? (k.lang === "fr" ? "Analyser l'image" : "Analyse image") : (k.lang === "fr" ? "Activer la caméra" : "Enable camera")}
-                </button>
-                <button onClick={() => ask("Explique-moi ce que je vois.", { whatYouSee: true })} className="flex-1 h-11 rounded-xl bg-white/10 border border-[#D6A84B]/40 text-[#F2D28B] font-bold">
-                  👁️ {k.lang === "fr" ? "CE QUE JE VOIS" : "WHAT I SEE"}
-                </button>
-              </div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </>
-  );
+  const suggestions=k.screen==="mining"?(en?["Explain this mining stage","Show the construction stage","Open the Tokadeh case"]:["Explique cette étape minière","Affiche l’étape construction","Explique le cas Tokadeh"]):(en?["Show the multimodal corridor","What can AGL do for my mine?","Open an appointment"]:["Affiche le corridor multimodal","Que peut faire AGL pour ma mine ?","Ouvre un rendez-vous"]);
+  const orbState=live.active?(live.phase==="connecting"?"thinking":live.phase):k.aiState;
+  return <><button className="ai-launcher" onClick={()=>{k.setAiOpen(true);k.touch();}} aria-label="Ouvrir AGL AI"><Orb size={36} state={orbState}/><span>AGL AI · {en?"Let’s talk":"Parlons ensemble"}</span></button><AnimatePresence>{k.aiOpen&&<motion.aside className="ai-panel" initial={{x:520,opacity:0}} animate={{x:0,opacity:1}} exit={{x:520,opacity:0}} transition={{duration:.35}} aria-label="Assistant AGL AI"><header><div><h2>AGL AI</h2><p className="ai-status">{live.active?`${live.model||"Gemini Live"} · ${live.phase}`:(status|| (en?"Your logistics guide":"Votre guide logistique"))}</p></div><button className="ai-icon-btn" aria-label="Fermer AGL AI" onClick={()=>{live.stop();k.setAiOpen(false);}}><X size={22}/></button></header><div className="ai-messages"><div className="ai-message">{greetings}</div>{messages.map((m,i)=><div key={i} className={`ai-message ${m.role==="user"?"user":""}`}>{m.text||<span style={{color:"#aabbd2"}}>{en?"Thinking…":"Je réfléchis…"}</span>}</div>)}{live.error&&<p className="ai-status" role="status">{live.error}</p>}<div ref={bottom}/></div><footer><div className="ai-suggestions">{suggestions.map(s=><button disabled={busy} key={s} onClick={()=>ask(s)}>{s}</button>)}</div><div className="ai-input-row"><button className={`ai-icon-btn ${live.active?"gold":""}`} disabled={busy} title={en?"Live voice conversation":"Conversation vocale Live"} onClick={()=>{k.touch();live.active?live.stop():live.start();logEvent("voice_used",{mode:"native-live"});}}>{live.active?<MicOff size={23}/>:<Mic size={23}/>}</button><input aria-label="Question à AGL AI" value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")ask(input);}} placeholder={en?"Ask your question…":"Votre question…"}/><button className="ai-icon-btn gold" disabled={busy||!input.trim()} aria-label="Envoyer la question" onClick={()=>ask(input)}><Send size={21}/></button></div><div className="button-row" style={{marginTop:10,gap:8}}><button className="text-action" disabled={busy} onClick={()=>ask(en?"Explain what is on my screen.":"Explique ce que je vois à l’écran.")}><Eye size={18}/>{en?"This screen":"Cet écran"}</button><button className="text-action" onClick={()=>{live.stop();k.setAiOpen(false);k.go("vision");}}><Camera size={18}/>{en?"Camera & voice":"Caméra & voix"}</button><button className="ai-icon-btn" style={{minWidth:44,minHeight:44,marginLeft:"auto"}} aria-label="Interrompre la réponse" onClick={()=>{live.interrupt();stopServerVoice();controller.current?.abort();}}><VolumeX size={18}/></button></div><p className="ai-status">{en?"Live audio needs microphone permission. No conversations are saved.":"Le mode Live demande l’accès au micro. Les conversations ne sont pas enregistrées."}</p></footer></motion.aside>}</AnimatePresence></>;
 }

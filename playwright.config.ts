@@ -1,0 +1,2 @@
+import { defineConfig } from "@playwright/test";
+export default defineConfig({testDir:"./tests",timeout:45000,fullyParallel:false,workers:1,reporter:"list",use:{baseURL:process.env.TEST_BASE_URL||"http://localhost:3120",viewport:{width:1920,height:1080},trace:"retain-on-failure",launchOptions:{args:["--use-fake-ui-for-media-stream","--use-fake-device-for-media-stream"]}},outputDir:"test-results"});

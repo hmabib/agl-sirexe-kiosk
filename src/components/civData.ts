@@ -7,7 +7,7 @@ export const CITIES: CivCity[] = [
   { name: "San Pedro", lat: 4.75, lng: -6.64, x: 165.3, y: 420.0, kind: "port" },
   { name: "Bouaké", lat: 7.69, lng: -5.03, x: 275.7, y: 227.6, kind: "hub" },
   { name: "Yamoussoukro", lat: 6.82, lng: -5.28, x: 258.5, y: 284.5, kind: "city" },
-  { name: "Korhogo", lat: 9.46, lng: -5.63, x: 234.5, y: 111.7, kind: "mine" },
+  { name: "Korhogo", lat: 9.46, lng: -5.63, x: 234.5, y: 111.7, kind: "city" },
   { name: "Ferkessédougou", lat: 9.6, lng: -5.2, x: 264.0, y: 102.5, kind: "city" },
   { name: "Man", lat: 7.41, lng: -7.55, x: 102.9, y: 245.9, kind: "city" },
   { name: "Odienné", lat: 9.51, lng: -7.57, x: 101.5, y: 108.4, kind: "city" },

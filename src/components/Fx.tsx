@@ -6,7 +6,7 @@ let actx: AudioContext | null = null;
 let ambientNodes: { osc: OscillatorNode[]; gain: GainNode } | null = null;
 function ctx() {
   if (typeof window === "undefined") return null;
-  actx = actx ?? new (window.AudioContext || (window as any).webkitAudioContext)();
+  actx = actx ?? new window.AudioContext();
   if (actx.state === "suspended") actx.resume().catch(() => {});
   return actx;
 }
@@ -14,7 +14,7 @@ export function sfx(kind: "select" | "success" | "alert" | "whoosh" | "pop" = "s
   try {
     if (typeof window === "undefined") return;
     if (localStorage.getItem("agl_mute") === "1") return;
-    actx = actx ?? new (window.AudioContext || (window as any).webkitAudioContext)();
+    actx = actx ?? new window.AudioContext();
     const t = actx.currentTime;
     const notes: Record<string, number[]> = {
       select: [660, 880],
@@ -199,18 +199,18 @@ export function ScoreRing({ score, label }: { score: number; label: string }) {
 
 // ---------- Badge modèle branché ----------
 export function ModelBadge() {
-  const [info, setInfo] = useState<any>(null);
+  const [info, setInfo] = useState<{configured:boolean;provider:string;textModel:string;liveModel:string}|null>(null);
   useEffect(() => {
     fetch("/api/gemini").then((r) => r.json()).then(setInfo).catch(() => {});
   }, []);
   if (!info) return <span className="text-[11px] text-white/40">● IA…</span>;
-  const label = !info.connected
+  const label = !info.configured
     ? "● MOCK • DÉMO"
     : info.provider === "mistral"
-      ? `● ${info.textModel.toUpperCase()} • LIVE`
-      : `● ${String(info.textModel).toUpperCase()} • ${String(info.liveModel).toUpperCase()} READY`;
+      ? `● ${info.textModel.toUpperCase()} · CONFIGURÉ`
+      : `● ${String(info.textModel).toUpperCase()} · CONFIGURÉ`;
   return (
-    <span title={JSON.stringify(info)} className={`text-[11px] font-bold px-3 h-9 hidden md:flex items-center rounded-full border ${info.connected ? "text-[#5df2c8] border-[#5df2c8]/30 bg-[#5df2c8]/10" : "text-white/40 border-white/15 bg-white/5"}`}>
+    <span title={JSON.stringify(info)} className={`text-[11px] font-bold px-3 h-9 hidden md:flex items-center rounded-full border ${info.configured ? "text-[#5df2c8] border-[#5df2c8]/30 bg-[#5df2c8]/10" : "text-white/40 border-white/15 bg-white/5"}`}>
       {label}
     </span>
   );

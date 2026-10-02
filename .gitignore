@@ -12,6 +12,9 @@
 
 # testing
 /coverage
+/test-results/
+/playwright-report/
+/public/assets/template/contact-sheet.jpg
 
 # next.js
 /.next/

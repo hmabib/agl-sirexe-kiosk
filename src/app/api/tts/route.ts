@@ -28,8 +28,12 @@ export async function POST(req: NextRequest) {
         });
         if (!r.ok) continue;
         const j = await r.json();
-        const data = j.candidates?.[0]?.content?.parts?.find((p: any) => p.inlineData)?.inlineData?.data;
-        if (data) return NextResponse.json({ ok: true, model: m, audio: `data:audio/wav;base64,${data}` });
+        const data = j.candidates?.[0]?.content?.parts?.find((p: {inlineData?:{data?:string}}) => p.inlineData)?.inlineData?.data;
+        if (data) {
+          const pcm=Buffer.from(data,"base64"); const header=Buffer.alloc(44);
+          header.write("RIFF",0);header.writeUInt32LE(pcm.length+36,4);header.write("WAVEfmt ",8);header.writeUInt32LE(16,16);header.writeUInt16LE(1,20);header.writeUInt16LE(1,22);header.writeUInt32LE(24000,24);header.writeUInt32LE(48000,28);header.writeUInt16LE(2,32);header.writeUInt16LE(16,34);header.write("data",36);header.writeUInt32LE(pcm.length,40);
+          return NextResponse.json({ ok: true, model: m, audio: `data:audio/wav;base64,${Buffer.concat([header,pcm]).toString("base64")}` });
+        }
       } catch { /* try next */ }
     }
     return NextResponse.json({ ok: false }, { status: 503 });

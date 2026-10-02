@@ -6,16 +6,16 @@
   --color-agl-blue: #003f73;
   --color-agl-gold: #d6a84b;
   --color-agl-goldlight: #f2d28b;
-  --font-sans: "Manrope", "Inter", system-ui, sans-serif;
+  --font-sans: Arial, Helvetica, sans-serif;
 }
 
 :root {
-  --agl-night: #001d3d;
-  --agl-deep: #002b5b;
-  --agl-blue: #003f73;
-  --agl-gold: #d6a84b;
-  --agl-gold-2: #e6bd69;
-  --agl-gold-3: #f2d28b;
+  --agl-night: #1B365F;
+  --agl-deep: #18335F;
+  --agl-blue: #003764;
+  --agl-gold: #EED58E;
+  --agl-gold-2: #EFD58E;
+  --agl-gold-3: #FBE192;
 }
 
 * { -webkit-tap-highlight-color: transparent; }
@@ -23,7 +23,7 @@ html, body {
   height: 100%;
   background: #000a18;
   color: #fff;
-  font-family: "Manrope", "Inter", system-ui, sans-serif;
+  font-family: Arial, Helvetica, sans-serif;
   overscroll-behavior: none;
   overflow: hidden;
 }

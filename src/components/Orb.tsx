@@ -78,7 +78,7 @@ export function AglLogo({ size = "md" }: { size?: "sm" | "md" | "lg" }) {
     <div className="flex items-center gap-3">
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
-        src="/assets/agl-logo.svg"
+        src="/assets/template/image6.svg"
         alt="AGL — Africa Global Logistics"
         style={{ height: h, width: "auto" }}
         className="object-contain"

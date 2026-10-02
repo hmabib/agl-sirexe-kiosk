@@ -4,11 +4,11 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useKiosk, logEvent } from "@/lib/store";
 import { TopBar } from "./Chrome";
 import dynamic from "next/dynamic";
-import { ConfettiBurst, ParticleField, ScoreRing, sfx } from "./Fx";
+import { ConfettiBurst, ScoreRing, sfx } from "./Fx";
 
 const RealCivMap = dynamic(() => import("./RealMaps").then((m) => m.RealCivMap), {
   ssr: false,
-  loading: () => <div className="h-[420px] flex items-center justify-center text-[#D6A84B] animate-pulse">🗺️ Chargement de la vraie carte…</div>,
+  loading: () => <div className="h-[420px] md:h-[480px] flex items-center justify-center text-[#D6A84B] animate-pulse">🗺️ Chargement de la vraie carte…</div>,
 });
 
 const CARGOS = [
@@ -27,13 +27,12 @@ const SCENARIOS = [
 export function MissionScreen() {
   const k = useKiosk();
   const [step, setStep] = useState(0);
-  const [metrics, setMetrics] = useState({ time: "—", cost: "—", dist: "—", co2: "—", penalty: "" });
   const [missionStart, setMissionStart] = useState<number | null>(null);
   const [elapsed, setElapsed] = useState(0);
   const [choice, setChoice] = useState<string | null>(null);
 
   // Moteur de calcul pointu : cargaison × scénario × route × incident
-  function computeMetrics() {
+  const metrics = useMemo(() => {
     const baseTime = { A: 44, B: 40, C: 32 }[k.scenario ?? "A"] ?? 44;
     const baseDist = { A: 680, B: 640, C: 480 }[k.scenario ?? "A"] ?? 680;
     const routeAdj = { "route-A": 0, "route-B": -6, "route-C": -10 }[k.route ?? "route-A"] ?? 0;
@@ -50,12 +49,11 @@ export function MissionScreen() {
       co2,
       penalty: k.incident ? "+8 h incident" : "",
     };
-  }
+  }, [k.scenario,k.route,k.cargo,k.incident]);
 
   // chrono mission
   useEffect(() => {
-    if (step === 2 && missionStart === null) setMissionStart(Date.now());
-    if (step >= 2 && missionStart) {
+    if (step >= 2 && step < 4 && missionStart) {
       const id = setInterval(() => setElapsed(Math.floor((Date.now() - missionStart) / 1000)), 1000);
       return () => clearInterval(id);
     }
@@ -70,17 +68,14 @@ export function MissionScreen() {
       "🛃 Documents douaniers validés ✓",
       "📍 Hub Bouaké — consolidation en cours…",
     ];
-    setFeed(seed);
     const live = ["🚚 Truck #12 — 62 km/h", "🚆 Sillon rail réservé ✓", "⚓ Terminal Abidjan — fenêtre 14:00", "📦 Capteurs : température OK", "🛰️ ETA recalculé en direct"];
     let i = 0;
-    const id = setInterval(() => { setFeed((f) => [...live.slice(0, ++i % (live.length + 1)), ...(f.slice(-2))].slice(-5)); }, 3200);
+    const id = setInterval(() => { setFeed([...seed,live[i++%live.length]].slice(-4)); }, 3200);
     return () => clearInterval(id);
   }, [step, k.route]);
 
   useEffect(() => {
     if (step === 2 && k.route) {
-      setMetrics(computeMetrics());
-      // eslint-disable-next-line react-hooks/exhaustive-deps
       const id = setTimeout(() => {
         if (!k.incident) {
           const inc = ["🌧️ Fortes pluies — tronçon inondé", "🚧 Route fermée — travaux", "⚠️ Congestion terminal"][Math.floor(Math.random() * 3)];
@@ -94,11 +89,7 @@ export function MissionScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step, k.route]);
 
-  // recalcule dès que l'incident frappe
-  useEffect(() => {
-    if (step === 2 && k.route) setMetrics(computeMetrics());
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [k.incident]);
+  useEffect(()=>{k.setContextDetails({step:["cargo-selection","scenario-selection","route-selection","incident","mission-result"][step],metrics,simulation:true,weight:k.cargo==="equipment"?80:undefined});},[step,metrics,k.cargo,k.setContextDetails]);
 
   const expertise = ["Transport & Logistics", "Project Cargo", "Port Operations", "Warehousing", "Rail", "Freight Forwarding", "Customs & Coordination", "Multimodal Solutions"];
 
@@ -143,7 +134,7 @@ export function MissionScreen() {
             </div>
             <div className="flex gap-3">
               <BackBtn onClick={() => setStep(0)} />
-              <NextBtn disabled={!k.scenario} onClick={() => setStep(2)} label="VOIR LA CARTE →" />
+              <NextBtn disabled={!k.scenario} onClick={() => {setStep(2);if(missionStart===null)setMissionStart(Date.now());}} label="VOIR LA CARTE →" />
             </div>
           </>
         )}
@@ -199,7 +190,7 @@ export function MissionScreen() {
               {/* live feed corridor */}
               {feed.length > 0 && (
                 <div className="rounded-3xl bg-black/50 border border-[#5df2c8]/25 p-4 font-mono text-xs text-[#5df2c8] space-y-1">
-                  <div className="text-[10px] tracking-[0.3em] font-bold animate-pulse">● LIVE CORRIDOR FEED</div>
+                  <div className="text-[10px] tracking-[0.3em] font-bold animate-pulse">● FLUX SIMULÉ · AUCUNE TÉLÉMÉTRIE RÉELLE</div>
                   <AnimatePresence initial={false}>
                     {feed.map((l, i) => (
                       <motion.div key={`${i}-${l}`} initial={{ opacity: 0, x: -12 }} animate={{ opacity: 1, x: 0 }}>{l}</motion.div>
@@ -231,7 +222,7 @@ export function MissionScreen() {
                 ].map(([id, label]) => (
                   <button key={id} onClick={() => {
                     k.touch(); sfx(id === "D" ? "whoosh" : "alert");
-                    if (id === "D") { k.setAiOpen(true); }
+                    if (id === "D") { k.requestAI("Aide-moi à gérer cet incident avec cette cargaison et ce corridor. Explique les options sans annoncer une faisabilité non vérifiée."); return; }
                     if (id === "B") { k.setRoute("route-B"); }
                     if (id === "C") { k.setRoute("route-B"); }
                     setChoice(id);
@@ -276,7 +267,7 @@ export function MissionScreen() {
               <p className="mt-8 text-white/70">Une chaîne performante ne repose pas sur un seul mode.</p>
               <p className="text-3xl font-extrabold mt-1">ELLE REPOSE SUR L’ORCHESTRATION.</p>
               <div className="flex gap-3 justify-center mt-8">
-                <button onClick={() => { k.setFinaleStats({ Distance: metrics.dist, Temps: metrics.time, CO2: metrics.co2, Chrono: `${Math.floor(elapsed / 60)}:${String(elapsed % 60).padStart(2, "0")}` }); k.go("finale"); }} className="h-16 px-8 rounded-2xl bg-gradient-to-r from-[#D6A84B] to-[#F2D28B] text-[#001D3D] font-extrabold text-lg">TERMINER →</button>
+                <button onClick={() => { k.setFinaleStats({ Distance: metrics.dist, Temps: metrics.time, CO2: metrics.co2, Chrono: `${Math.floor(elapsed / 60)}:${String(elapsed % 60).padStart(2, "0")}` }); k.go("satisfaction"); }} className="h-16 px-8 rounded-2xl bg-gradient-to-r from-[#D6A84B] to-[#F2D28B] text-[#001D3D] font-extrabold text-lg">TERMINER & DONNER MON AVIS →</button>
               </div>
             </motion.div>
           </div>

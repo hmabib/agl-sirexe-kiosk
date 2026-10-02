@@ -1,16 +1,19 @@
 "use client";
+import { publishAction, type MaterialAction } from "./actions";
 
-export interface StreamResult { reply: string; provider: string; model: string; error?: string | null }
+export interface StreamResult { reply: string; provider: string; model: string; error?: string | null; actions?: MaterialAction[]; degraded?: boolean }
 
-// Streaming SSE mot-à-mot : onToken reçoit le texte cumulé.
+// Streaming SSE natif : onToken reçoit le texte cumulé.
 export async function askStream(
-  payload: { message: string; context?: unknown; image?: string; lang?: string; model?: string; voice?: boolean },
-  onToken: (full: string) => void
+  payload: { message: string; context?: unknown; image?: string; lang?: string; model?: string; voice?: boolean; history?: {role:"user"|"ai";text:string}[] },
+  onToken: (full: string) => void,
+  signal?: AbortSignal
 ): Promise<StreamResult> {
   const res = await fetch("/api/gemini/stream", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
+    signal,
   });
   if (!res.ok || !res.body) throw new Error("stream failed");
   const reader = res.body.getReader();
@@ -30,11 +33,11 @@ export async function askStream(
       try {
         const j = JSON.parse(line);
         if (j.t) { full += j.t; onToken(full); }
-        if (j.done) meta = { reply: full, provider: j.provider, model: j.model, error: j.error };
+        if (j.done) {meta = { reply: j.reply || full, provider: j.provider, model: j.model, actions: j.actions, degraded: j.degraded };for(const action of j.actions??[])publishAction(action);}
       } catch { /* ignore */ }
     }
   }
-  meta.reply = full;
+  meta.reply = meta.reply || full;
   return meta;
 }
 

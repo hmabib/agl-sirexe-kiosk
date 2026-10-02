@@ -36,14 +36,17 @@ export function RealCivMap({
   const divRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<Leaflet.Map | null>(null);
   const layersRef = useRef<{ routes: Record<string, Leaflet.Polyline> }>({ routes: {} });
+  const citiesRef = useRef<Leaflet.Marker[]>([]);
+  const incidentRef = useRef<Leaflet.LayerGroup | null>(null);
   const cbRef = useRef(onSelectRoute);
-  cbRef.current = onSelectRoute;
+  useEffect(()=>{cbRef.current = onSelectRoute;},[onSelectRoute]);
   const [failed, setFailed] = useState(false);
+  const [mapReady, setMapReady] = useState(false);
   void _zoom;
 
   const cityByName = Object.fromEntries(CITIES.map((c) => [c.name, c]));
   const selRef = useRef(selectedRoute);
-  selRef.current = selectedRoute;
+  useEffect(()=>{selRef.current = selectedRoute;},[selectedRoute]);
 
   function styleRoutes() {
     for (const [id, line] of Object.entries(layersRef.current.routes)) {
@@ -51,16 +54,19 @@ export function RealCivMap({
       try {
         line.setStyle(
           active
-            ? { color: "#F2D28B", weight: 6, opacity: 1, className: "rroute flow-line" }
-            : { color: "#3a6ea5", weight: 3, opacity: 0.7, className: "rroute" }
+            ? { color: "#EED58E", weight: 6, opacity: 1 }
+            : { color: "#3a6ea5", weight: 3, opacity: 0.7 }
         );
+        line.getElement()?.classList.toggle("flow-line", active);
       } catch {}
     }
   }
 
   useEffect(() => {
+    if (failed) return;
     let alive = true;
     let map: Leaflet.Map | null = null;
+    const layers = layersRef.current;
     (async () => {
       try {
         const L = (await import("leaflet")).default;
@@ -75,24 +81,24 @@ export function RealCivMap({
         });
         map.setView([7.55, -5.6], 7);
         L.control.zoom({ position: "topright" }).addTo(map);
-        let errs = 0;
+        let errs = 0, loaded = 0;
         L.tileLayer(TILES, { attribution: ATTR, maxZoom: 19 })
           .on("tileerror", () => {
             if (++errs > 12 && alive) setFailed(true);
           })
+          .on("tileload", () => { loaded++; })
+          .on("load", () => { if (alive && errs > 0 && loaded === 0) setFailed(true); })
           .addTo(map);
 
         // villes réelles
         for (const c of CITIES) {
-          const gold =
-            (c.kind === "mine" && corridorNodes.includes("MINE")) ||
-            (c.kind === "hub" && corridorNodes.includes("LOGISTICS HUB"));
-          L.marker([c.lat, c.lng], {
-            icon: cityIcon(L, c, { gold, big: c.kind !== "city" }),
+          const marker = L.marker([c.lat, c.lng], {
+            icon: cityIcon(L, c, { big: c.kind !== "city" }),
             keyboard: false,
           }).addTo(map);
+          citiesRef.current.push(marker);
         }
-        // 3 corridors réels
+        // Liaisons de principe entre des villes réelles.
         for (const id of Object.keys(ROUTES)) {
           const latlngs = (ROUTES[id] ?? [])
             .map((n) => cityByName[n])
@@ -105,19 +111,12 @@ export function RealCivMap({
             className: "rroute",
           }).addTo(map);
           line.on("click", () => cbRef.current?.(id));
-          layersRef.current.routes[id] = line;
+          layers.routes[id] = line;
         }
-        // incident
-        if (incidentZone) {
-          const b = cityByName["Bouaké"];
-          L.circle([b.lat + 0.35, b.lng], { radius: 22000, color: "#ff5a5a", dashArray: "8 6", fillOpacity: 0.15 }).addTo(map);
-          L.marker([b.lat + 0.35, b.lng], {
-            icon: L.divIcon({ className: "rmark-wrap", html: `<div class="rmark alert"><span>⚠️</span></div>`, iconSize: [0, 0] }),
-            keyboard: false,
-          }).addTo(map);
-        }
+        incidentRef.current = L.layerGroup().addTo(map);
         mapRef.current = map;
         styleRoutes();
+        setMapReady(true);
       } catch {
         if (alive) setFailed(true);
       }
@@ -126,10 +125,34 @@ export function RealCivMap({
       alive = false;
       map?.remove();
       if (mapRef.current === map) mapRef.current = null;
-      layersRef.current.routes = {};
+      layers.routes = {};
+      citiesRef.current = [];
+      incidentRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [failed]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!mapReady || failed || !map) return;
+    let cancelled = false;
+    void import("leaflet").then(({ default: L }) => {
+      if (cancelled || mapRef.current !== map) return;
+      citiesRef.current.forEach((marker, index) => {
+        const city = CITIES[index];
+        marker.setIcon(cityIcon(L, city, { gold: city.kind === "hub" && corridorNodes.includes("LOGISTICS HUB"), big: city.kind !== "city" }));
+      });
+      const layer = incidentRef.current;
+      layer?.clearLayers();
+      if (incidentZone && layer) {
+        const city = CITIES.find(c => c.name === "Bouaké")!;
+        const position: [number, number] = [city.lat + 0.35, city.lng];
+        L.circle(position, { radius: 22000, color: "#ff5a5a", dashArray: "8 6", fillOpacity: 0.15, className: "incident-zone" }).addTo(layer);
+        L.marker(position, { icon: L.divIcon({ className: "rmark-wrap", html: '<div class="rmark alert"><span>⚠️</span></div>', iconSize: [0, 0] }), keyboard: false }).addTo(layer);
+      }
+    });
+    return () => { cancelled = true; };
+  }, [mapReady, failed, incidentZone, corridorNodes]);
 
   // met à jour le surlignage quand la sélection change
   useEffect(() => {
@@ -165,10 +188,12 @@ export function RealWestAfrica({
   const markersRef = useRef<Leaflet.Marker[]>([]);
   const lineRef = useRef<Leaflet.Polyline | null>(null);
   const cbRef = useRef(onPlace);
-  cbRef.current = onPlace;
+  useEffect(()=>{cbRef.current = onPlace;},[onPlace]);
   const [failed, setFailed] = useState(false);
+  const [mapReady, setMapReady] = useState(false);
 
   useEffect(() => {
+    if (failed) return;
     let alive = true;
     let map: Leaflet.Map | null = null;
     (async () => {
@@ -188,11 +213,13 @@ export function RealWestAfrica({
           [20, 8],
         ]);
         L.control.zoom({ position: "topright" }).addTo(map);
-        let errs = 0;
+        let errs = 0, loaded = 0;
         L.tileLayer(TILES, { attribution: ATTR, maxZoom: 19 })
           .on("tileerror", () => {
             if (++errs > 12 && alive) setFailed(true);
           })
+          .on("tileload", () => { loaded++; })
+          .on("load", () => { if (alive && errs > 0 && loaded === 0) setFailed(true); })
           .addTo(map);
         // repères ports régionaux
         const refs: [string, number, number][] = [
@@ -211,6 +238,7 @@ export function RealWestAfrica({
         }
         map.on("click", (e: Leaflet.LeafletMouseEvent) => cbRef.current(e.latlng.lat, e.latlng.lng));
         mapRef.current = map;
+        setMapReady(true);
       } catch {
         if (alive) setFailed(true);
       }
@@ -222,14 +250,16 @@ export function RealWestAfrica({
       markersRef.current = [];
       lineRef.current = null;
     };
-  }, []);
+  }, [failed]);
 
   // resync marqueurs + corridor
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || failed) return;
+    if (!map || failed || !mapReady) return;
+    let cancelled = false;
     (async () => {
       const L = (await import("leaflet")).default;
+      if (cancelled || mapRef.current !== map) return;
       markersRef.current.forEach((m) => m.remove());
       markersRef.current = [];
       lineRef.current?.remove();
@@ -252,14 +282,18 @@ export function RealWestAfrica({
         ).addTo(map);
       }
     })();
-  }, [placed, failed]);
+    return () => { cancelled = true; };
+  }, [placed, failed, mapReady]);
 
   if (failed) {
     return (
-      <WestAfricaMap
-        placed={placed.map((p) => ({ id: p.id, x: 320 + p.lng * 20, y: 210 - p.lat * 10 }))}
-        onPlace={(_x, _y) => {}}
-      />
+      <div className="h-[420px]">
+        <WestAfricaMap
+          placed={placed.map((p) => ({ id: p.id, x: 24 + (p.lng + 22) / 30 * 592, y: 24 + (20 - p.lat) / 18 * 372 }))}
+          onPlace={(x, y) => onPlace(Math.max(2, Math.min(20, 20 - (y - 24) / 372 * 18)), Math.max(-22, Math.min(8, (x - 24) / 592 * 30 - 22)))}
+        />
+        <p className="ai-status">Mode hors ligne · schéma de simulation, placements indicatifs.</p>
+      </div>
     );
   }
   return (
