@@ -68,7 +68,7 @@ function Shell() {
 
   return (
     <div
-      className="h-full w-full relative overflow-hidden text-white"
+      className={`h-full w-full relative overflow-hidden text-white ${k.aiOpen && !["attract", "satisfaction", "quotation", "vision"].includes(k.screen) ? "lara-open" : ""}`}
       onPointerDown={onDown}
       onTouchMove={() => k.touch()}
       style={{ background: "#000a18" }}

@@ -6,6 +6,19 @@ export interface SolutionStep { label: string; detail: string; mode?: StepMode }
 export interface SolutionPoint { label: string; text: string }
 export type ChartKind = "bar" | "line" | "donut";
 export interface Chart { title: string; kind: ChartKind; labels: string[]; values: number[]; unit?: string; source?: string }
+export type FlowKind = "mine" | "plant" | "truck" | "rail" | "port" | "ship" | "plane" | "warehouse" | "customs" | "hub" | "market";
+export interface FlowNode { label: string; kind: FlowKind; detail?: string }
+export interface FlowLink { from: number; to: number; mode: StepMode; label?: string }
+export interface Flow { title: string; nodes: FlowNode[]; links: FlowLink[]; info: string[] }
+export const FLOW_KINDS: FlowKind[] = ["mine", "plant", "truck", "rail", "port", "ship", "plane", "warehouse", "customs", "hub", "market"];
+// Mode d’une liaison déduit de ses deux extrémités (rail si l’une est ferroviaire, mer entre port et navire…).
+export function inferMode(a: FlowKind, b: FlowKind): StepMode {
+  if (a === "rail" || b === "rail") return "rail";
+  if (a === "plane" || b === "plane") return "air";
+  if ((a === "port" || a === "ship") && (b === "ship" || b === "port" || b === "market")) return "sea";
+  if (a === "customs" || b === "customs") return "customs";
+  return "road";
+}
 export interface Solution { title: string; summary: string; steps: SolutionStep[]; considerations: SolutionPoint[]; route?: RouteId; miningStage?: MiningStage; imagePrompt?: string; next: Screen[] }
 export type MaterialAction =
   | { type: "show_route"; route: RouteId }
@@ -17,6 +30,7 @@ export type MaterialAction =
   | { type: "solution"; solution: Solution }
   | { type: "render_video"; title: string; prompt: string }
   | { type: "chart"; chart: Chart }
+  | { type: "flow"; flow: Flow }
   | { type: "go"; screen: Screen };
 export const ALLOWED_SCREENS = ["home", "games", "mission", "explore", "build", "vision", "mining", "corporate", "appointment", "careers", "quotation", "satisfaction", "market", "canvas"];
 export const ROUTES: RouteId[] = ["route-A", "route-B", "route-C"];
@@ -39,6 +53,15 @@ export function parseToolAction(name?:string, args:Record<string,unknown>={ }):M
   if(name==="show_mining"&&MINING_STAGES.includes(args.stage as MiningStage))return {type:"show_mining",stage:args.stage as MiningStage};
   if(name==="show_solution"){const solution=parseSolution(args);return solution?{type:"solution",solution}:null;}
   if(name==="generate_video"&&typeof args.prompt==="string"&&args.prompt.trim())return {type:"render_video",title:str(args.title,150)||"Film Africa Global Logistics",prompt:args.prompt.slice(0,1500)};
+  if(name==="show_flow"){
+    const title=str(args.title,150);
+    const nodes=list(args.nodes,8).map(n=>({label:str(n.label,40),kind:(FLOW_KINDS.includes(n.kind as FlowKind)?n.kind:"hub") as FlowKind,detail:str(n.detail,120)||undefined})).filter(n=>n.label);
+    if(!title||nodes.length<2)return null;
+    let links=list(args.links,12).map(l=>({from:Number(l.from),to:Number(l.to),mode:(STEP_MODES.includes(l.mode as StepMode)?l.mode:"road") as StepMode,label:str(l.label,40)||undefined})).filter(l=>Number.isInteger(l.from)&&Number.isInteger(l.to)&&l.from!==l.to&&l.from>=0&&l.to>=0&&l.from<nodes.length&&l.to<nodes.length);
+    if(!links.length)links=nodes.slice(1).map((n,i)=>({from:i,to:i+1,mode:inferMode(nodes[i].kind,n.kind),label:undefined}));
+    const info=(Array.isArray(args.info)?args.info:[]).slice(0,5).map(x=>String(x).slice(0,40)).filter(Boolean);
+    return {type:"flow",flow:{title,nodes,links,info}};
+  }
   if(name==="show_chart"){const labels=(Array.isArray(args.labels)?args.labels:[]).slice(0,12).map(l=>String(l).slice(0,40));const values=(Array.isArray(args.values)?args.values:[]).slice(0,labels.length).map(Number);const title=str(args.title,150);if(title&&labels.length>=2&&values.length===labels.length&&values.every(Number.isFinite))return {type:"chart",chart:{title,kind:(["bar","line","donut"].includes(String(args.kind))?args.kind:"bar") as ChartKind,labels,values,unit:str(args.unit,20)||undefined,source:str(args.source,200)||undefined}};return null;}
   if(name==="open_brief"&&typeof args.title==="string"&&typeof args.body==="string")return {type:"sheet",title:args.title.slice(0,150),body:args.body.slice(0,2000)};
   if(name==="generate_image"&&typeof args.prompt==="string"&&args.prompt.trim()){const style=typeof args.style==="string"?args.style:"";return {type:"render_image",title:style?`Illustration · ${style}`:"Illustration",prompt:`${args.prompt.slice(0,700)}${STYLE_HINT[style]?` (${STYLE_HINT[style]})`:""}`};}
@@ -51,6 +74,7 @@ export function describeAction(a: MaterialAction): string {
   switch (a.type) {
     case "solution": return `Vue solution « ${a.solution.title} » affichée : ${a.solution.steps.length} étapes${a.solution.route ? `, carte ${a.solution.route}` : ""}${a.solution.imagePrompt ? ", visuel en cours de création" : ""}.`;
     case "render_video": return "Film en cours de tournage, il s’affiche dans la vue dans une vingtaine de secondes avec le logo Africa Global Logistics.";
+    case "flow": return `Schéma animé « ${a.flow.title} » affiché : ${a.flow.nodes.length} maillons, ${a.flow.links.length} liaisons.`;
     case "chart": return `Graphique « ${a.chart.title} » affiché (${a.chart.labels.length} valeurs${a.chart.source?`, source ${a.chart.source}`:", illustratif"}).`;
     case "render_image": return "Illustration en cours de création, elle s’affiche dans la vue dans quelques secondes.";
     case "show_route": return `Carte du corridor ${a.route} affichée.`;

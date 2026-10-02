@@ -143,3 +143,14 @@ test("the orchestrator renders a branded film and an analytics chart",async({pag
   await view.getByRole("button",{name:"Convoi minier"}).click();
   await expect(page.locator(".brand-film video")).toBeVisible({timeout:15000});await expect(page.locator(".brand-film").getByRole("img",{name:"Africa Global Logistics"})).toBeVisible();
 });
+
+test("a logistics diagram request draws an animated flow with inferred modes",async({page})=>{
+  const flow={type:"flow",flow:{title:"Export de minerai de fer",nodes:[{label:"Mine",kind:"mine"},{label:"Rail minier",kind:"rail"},{label:"Port de Buchanan",kind:"port"},{label:"Vraquier",kind:"ship"}],links:[],info:["Déclarations douane"]}};
+  await page.route("**/api/gemini/stream",r=>r.fulfill({contentType:"text/event-stream",body:`data: ${JSON.stringify({action:flow})}\n\ndata: ${JSON.stringify({done:true,reply:"Voici le schéma.",provider:"x",model:"x",actions:[flow]})}\n\n`}));
+  await page.route("**/api/tts",r=>r.fulfill({status:503,body:"{}"}));
+  await page.goto("/accueil");await page.getByRole("button",{name:"Ouvrir Lara"}).click();await page.getByLabel("Question à Lara").fill("Schéma de l’export");await page.getByRole("button",{name:"Envoyer la question"}).click();
+  const diagram=page.getByRole("img",{name:"Export de minerai de fer"});await expect(diagram).toBeVisible();
+  await expect(page.locator(".flow-diagram path[id^=flow-edge-]")).toHaveCount(3);
+  await expect(page.locator(".flow-legend")).toContainText("Rail");await expect(page.locator(".flow-legend")).toContainText("Maritime");
+  const dl=page.waitForEvent("download");await page.getByRole("button",{name:"Télécharger le schéma"}).click();expect((await dl).suggestedFilename()).toContain(".svg");
+});

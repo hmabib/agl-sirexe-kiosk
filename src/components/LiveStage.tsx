@@ -9,18 +9,19 @@ import { brandImage, generateStudioImage, generateStudioVideo, STUDIO_LINKS } fr
 import type { Chart } from "@/lib/actions";
 import { downloadFile } from "@/lib/requests";
 import { Orb } from "./Orb";
+import { FlowDiagram } from "./FlowDiagram";
 import { sfx } from "@/lib/sound";
 
 const CinematicMap=dynamic(()=>import("./CinematicMap").then(m=>m.CinematicMap),{ssr:false,loading:()=> <div className="live-skeleton" style={{height:440}}>Envol vers la Côte d’Ivoire…</div>});
 
-type StageAction=Extract<MaterialAction,{type:"solution"|"show_route"|"sheet"|"show_image"|"render_image"|"render_video"|"chart"}>;
+type StageAction=Extract<MaterialAction,{type:"solution"|"show_route"|"sheet"|"show_image"|"render_image"|"render_video"|"chart"|"flow"}>;
 interface View { id:number; action:StageAction }
 interface ImageState { status:"loading"|"ready"|"error"; src?:string; text?:string }
 const MAX_VIEWS=6;
 const MODE_ICON:Record<StepMode,typeof Truck>={road:Truck,rail:TrainFront,sea:Ship,air:Plane,port:Anchor,warehouse:Warehouse,customs:ShieldCheck,heavy_lift:Construction,mining:Pickaxe,digital:Satellite,people:Users};
 const MODE_LABEL:Record<StepMode,{fr:string;en:string}>={road:{fr:"Route",en:"Road"},rail:{fr:"Rail",en:"Rail"},sea:{fr:"Maritime",en:"Sea"},air:{fr:"Aérien",en:"Air"},port:{fr:"Port",en:"Port"},warehouse:{fr:"Entreposage",en:"Warehousing"},customs:{fr:"Douane",en:"Customs"},heavy_lift:{fr:"Heavy lift",en:"Heavy lift"},mining:{fr:"Mine",en:"Mine"},digital:{fr:"Visibilité",en:"Visibility"},people:{fr:"Équipe",en:"Team"}};
-const isStage=(a:MaterialAction):a is StageAction=>["solution","show_route","sheet","show_image","render_image","render_video","chart"].includes(a.type);
-function titleOf(a:StageAction){return a.type==="solution"?a.solution.title:a.type==="chart"?a.chart.title:a.type==="show_route"?`Corridor ${a.route.replace("route-","")} · Côte d’Ivoire`:a.title;}
+const isStage=(a:MaterialAction):a is StageAction=>["solution","show_route","sheet","show_image","render_image","render_video","chart","flow"].includes(a.type);
+function titleOf(a:StageAction){return a.type==="solution"?a.solution.title:a.type==="chart"?a.chart.title:a.type==="flow"?a.flow.title:a.type==="show_route"?`Corridor ${a.route.replace("route-","")} · Côte d’Ivoire`:a.title;}
 function imagePrompt(a:StageAction){return a.type==="render_image"?a.prompt:a.type==="solution"?a.solution.imagePrompt:undefined;}
 function screenLabel(s:Screen,en:boolean){const l=STUDIO_LINKS.find(x=>x.screen===s);if(l)return en?l.en:l.fr;const fr:Partial<Record<Screen,string>>={home:"Accueil",games:"Expériences",corporate:"Présentation",careers:"Emploi",satisfaction:"Avis",market:"Performance",canvas:"Canvas Lara"};return fr[s]??s;}
 
@@ -65,6 +66,7 @@ export function LiveStage(){
 
   function download(){
     if(a.type==="render_video"){if(videoUrl){const link=document.createElement("a");link.href=videoUrl;link.download="AGL-film.mp4";link.target="_blank";link.click();}return;}
+    if(a.type==="flow"){const svg=document.querySelector(".flow-diagram svg");if(svg){const clone=svg.cloneNode(true) as SVGElement;clone.setAttribute("xmlns","http://www.w3.org/2000/svg");clone.setAttribute("style","background:#0b2147");downloadFile("Africa Global Logistics-schema.svg",`<?xml version="1.0" encoding="UTF-8"?>\n${clone.outerHTML}`,"image/svg+xml");}return;}
     if(a.type==="chart"){const c=a.chart;downloadFile("Africa Global Logistics-analyse.csv",["libellé;valeur"+(c.unit?` (${c.unit})`:""),...c.labels.map((l,i)=>`${l};${c.values[i]}`),"",`Source : ${c.source||"illustratif"}`].join("\n"),"text/csv");return;}
     if(a.type==="show_image"||(a.type==="render_image"&&img?.src)){const link=document.createElement("a");link.href=img?.src??"";link.download="Lara-image.png";link.click();return;}
     if(a.type==="solution"){const s=a.solution;downloadFile("Africa Global Logistics-solution.txt",[s.title,"",s.summary,"",en?"STEPS":"ÉTAPES",...s.steps.map((st,i)=>`${i+1}. ${st.label}${st.mode?` [${MODE_LABEL[st.mode][en?"en":"fr"]}]`:""} — ${st.detail}`),"",...(s.considerations.length?[en?"TO VALIDATE":"À VALIDER",...s.considerations.map(c=>`• ${c.label} : ${c.text}`),""]:[]),en?"Working solution prepared by Lara — to be validated with Africa Global Logistics teams.":"Solution de travail préparée par Lara — à valider avec les équipes Africa Global Logistics."].join("\n"));return;}
@@ -98,6 +100,7 @@ export function LiveStage(){
           {a.type==="show_route"&&<><CinematicMap route={a.route} onSelectRoute={r=>{setRoute(r);setViews(vs=>vs.map(v=>v.id===view.id?{...v,action:{type:"show_route",route:r as RouteId}}:v));}}/><p className="ai-status">{en?"Principle link between real cities. Route and feasibility to be validated by a route survey.":"Liaison de principe entre des villes réelles. Itinéraire et faisabilité à valider par une étude de route."}</p></>}
           {a.type==="render_video"&&<BrandFilm key={view.id} prompt={a.prompt} en={en} onReady={url=>setVideos(m=>({...m,[view.id]:url}))}/>}
           {a.type==="chart"&&<ChartView chart={a.chart} en={en}/>}
+          {a.type==="flow"&&<FlowDiagram key={view.id} flow={a.flow} en={en}/>}
           {a.type==="sheet"&&<p className="live-summary" style={{whiteSpace:"pre-wrap"}}>{a.body}</p>}
           {prompt||isImage?<section style={{marginTop:a.type==="solution"?22:0}}>
             {(!img||img.status==="loading")&&<div className="live-skeleton" role="status"><Sparkles size={20}/><ImageProgress en={en}/></div>}
@@ -116,7 +119,7 @@ export function LiveStage(){
         {a.solution.next.map(s=><button key={s} className="pill" style={{cursor:"pointer"}} onClick={()=>{close();k.go(s);}}>{screenLabel(s,en)} <ArrowUpRight size={14}/></button>)}
       </div>}
       <div className="button-row" style={{marginTop:0}}>
-        <button className="outline-btn" disabled={(isImage&&img?.status!=="ready")||(a.type==="render_video"&&!videoUrl)} onClick={()=>{download();k.touch();}}><Download size={18}/>{isImage?"Télécharger l’image":a.type==="render_video"?(en?"Download film":"Télécharger le film"):a.type==="chart"?(en?"Download data":"Télécharger les données"):"Télécharger la fiche"}</button>
+        <button className="outline-btn" disabled={(isImage&&img?.status!=="ready")||(a.type==="render_video"&&!videoUrl)} onClick={()=>{download();k.touch();}}><Download size={18}/>{isImage?"Télécharger l’image":a.type==="render_video"?(en?"Download film":"Télécharger le film"):a.type==="chart"?(en?"Download data":"Télécharger les données"):a.type==="flow"?(en?"Download diagram":"Télécharger le schéma"):"Télécharger la fiche"}</button>
         {a.type==="solution"&&a.solution.steps.length>0&&<button className="outline-btn" onClick={()=>{close();publishAction({type:"open_studio",tab:"schema",title:a.solution.title,body:a.solution.steps.map(s=>s.label).join(" → ")});}}><Network size={18}/>{en?"Edit as diagram":"Modifier en schéma"}</button>}
         <button className="brand-btn" onClick={()=>{close();k.go(nextScreens[0]);}}>Continuer<ArrowRight size={18}/></button>
       </div>

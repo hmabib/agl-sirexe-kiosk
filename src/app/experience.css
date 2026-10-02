@@ -269,3 +269,56 @@
 .chart-legend li { display:flex; align-items:center; gap:10px; font-size:15px; color:#dbe6f5; }
 .chart-legend i { width:12px; height:12px; border-radius:4px; flex:none; }
 .chart-legend strong { margin-left:auto; color:#fff; }
+
+/* ——— Lara · finition luxe ——— */
+/* Grand écran : la page se resserre au lieu d’être recouverte */
+@media (min-width:1100px) {
+  .kiosk-zoom { transition:width .45s cubic-bezier(.22,1,.36,1); }
+  .lara-open .kiosk-zoom { width:calc(100% - 444px) !important; }
+  .lara-open .ai-launcher { opacity:0; pointer-events:none; }
+}
+/* Petit écran : voile dégradé derrière le panneau */
+@media (max-width:1099px) { .lara-open::after { content:""; position:fixed; inset:0; z-index:65; background:linear-gradient(90deg,#04122a40,#04122acc 70%); backdrop-filter:blur(3px); pointer-events:none; } }
+.ai-panel.glass { width:min(420px,calc(100% - 28px)); right:14px; top:14px; bottom:14px; border-radius:28px; background:linear-gradient(165deg,#173a69c7 0%,#0b2147de 45%,#06142be8 100%); border:1px solid #ffffff1a; box-shadow:0 30px 90px #000a, 0 0 0 1px #eed58e14, inset 0 1px 0 #ffffff1f; }
+.ai-panel.glass header { position:relative; padding:18px 18px 16px 22px; border-bottom:none; }
+.ai-panel.glass header::after { content:""; position:absolute; left:22px; right:22px; bottom:0; height:1px; background:linear-gradient(90deg,transparent,#eed58e66,transparent); }
+.ai-panel.glass header h2 { font-size:15px; font-weight:700; letter-spacing:.32em; text-transform:uppercase; color:#f4e6bd; }
+.ai-live-status { display:flex; align-items:center; gap:7px; font-size:11px; letter-spacing:.06em; color:#9fb4d1; }
+.ai-pulse { width:6px; height:6px; border-radius:50%; background:#5f7799; }
+.ai-pulse.listening { background:#6ee7b7; box-shadow:0 0 0 0 #6ee7b799; animation:pulsedot 1.8s ease-out infinite; }
+.ai-pulse.thinking { background:#c4b5fd; animation:pulsedot 1.2s ease-out infinite; }
+.ai-pulse.speaking { background:#EED58E; animation:pulsedot 1s ease-out infinite; }
+@keyframes pulsedot { from { box-shadow:0 0 0 0 currentColor; } to { box-shadow:0 0 0 7px transparent; } }
+/* Fil : fondu sous l’en-tête, groupes, signature dorée */
+.ai-panel.glass .ai-messages { padding:22px 22px 18px; gap:6px; -webkit-mask-image:linear-gradient(180deg,transparent 0,#000 26px,#000 calc(100% - 14px),transparent); mask-image:linear-gradient(180deg,transparent 0,#000 26px,#000 calc(100% - 14px),transparent); scrollbar-width:none; }
+.ai-panel.glass .ai-messages::-webkit-scrollbar { display:none; }
+.ai-panel.glass .ai-message { font-size:15px; line-height:1.65; letter-spacing:.005em; color:#dfe8f5; padding:0; margin-top:2px; }
+.ai-panel.glass .ai-message::before { display:none; }
+.ai-panel.glass .ai-message.lead { margin-top:16px; }
+.ai-panel.glass .ai-messages > .ai-message:first-child { margin-top:0; }
+.ai-sign { display:block; margin-bottom:6px; font-size:10px; font-weight:700; letter-spacing:.28em; text-transform:uppercase; color:#EED58E; opacity:.85; }
+.ai-panel.glass .ai-message.user { align-self:flex-end; max-width:82%; padding:9px 14px; border-radius:18px 18px 6px 18px; background:#ffffff0f; border:1px solid #ffffff1a; color:#f2f6fc; font-size:14px; line-height:1.55; }
+.ai-panel.glass .ai-message.user.follow { border-radius:18px 6px 6px 18px; }
+.ai-panel.glass .ai-message.writing { color:#fff; text-shadow:0 0 22px #eed58e33; }
+.ai-panel.glass .ai-message.writing .ai-sign { animation:writeglow 1.4s ease-in-out infinite; }
+/* Pied : suggestions en fondu, barre de saisie précieuse */
+.ai-panel.glass footer { padding:10px 14px 14px; border-top:none; }
+.ai-panel.glass .ai-suggestions { -webkit-mask-image:linear-gradient(90deg,transparent,#000 14px,#000 calc(100% - 28px),transparent); mask-image:linear-gradient(90deg,transparent,#000 14px,#000 calc(100% - 28px),transparent); padding:2px 14px; margin:0 -14px; scrollbar-width:none; }
+.ai-panel.glass .ai-suggestions::-webkit-scrollbar { display:none; }
+.ai-panel.glass .ai-suggestions button { font-size:12px; padding:8px 13px; color:#cbd8ea; background:#ffffff08; border-color:#ffffff17; }
+.ai-panel.glass .ai-input-row { background:#020b1c8c; border-color:#ffffff1c; box-shadow:inset 0 1px 0 #ffffff0d; }
+.ai-panel.glass .ai-input-row input { font-size:15px; }
+.ai-panel.glass .ai-input-row input::placeholder { color:#7f93b1; }
+.ai-round.send { background:linear-gradient(145deg,#f6e3a8,#d9b968); box-shadow:0 6px 18px #eed58e33; }
+.ai-tools { padding:0 4px; }
+.ai-ghost { width:40px; height:40px; color:#9fb4d1; }
+.ai-note { letter-spacing:.04em; }
+
+.lara-open { background:linear-gradient(90deg,#163056,#0b1d3a) !important; }
+
+/* Schéma logistique animé */
+.flow-diagram { border-radius:18px; padding:8px 6px 14px; background:radial-gradient(120% 90% at 50% 0%,#1b365f66,transparent 70%),#04122a66; border:1px solid #ffffff12; }
+.flow-diagram svg { display:block; overflow:visible; }
+.flow-legend { display:flex; flex-wrap:wrap; gap:16px; padding:6px 14px 0; font-size:12px; color:#b9c9e0; }
+.flow-legend span { display:inline-flex; align-items:center; gap:8px; }
+@media (min-width:1100px) { .live-stage.docked { right:448px; } }
