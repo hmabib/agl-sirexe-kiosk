@@ -224,6 +224,10 @@ export function StoryboardTab({ initialBody }: { initialBody: string }) {
   const [busyScene, setBusyScene] = useState<number | null>(null);
   const [playing, setPlaying] = useState(false);
   const [sceneIdx, setSceneIdx] = useState(0);
+  const [cover, setCover] = useState("");
+  // Visuel de couverture généré aussitôt : le montage est prêt sans attendre.
+  // eslint-disable-next-line react-hooks/set-state-in-effect, react-hooks/exhaustive-deps
+  useEffect(() => { const first = scenes[0]; if (!first) return; let stop = false; void generateStudioImage(`cinematic keyframe, ${first.slice(0, 300)}`, lang).then(r => { if (!stop) { setCover(r.image); logEvent("image_generated", {}); } }).catch(() => {}); return () => { stop = true; }; }, []);
   useEffect(() => {
     if (!playing || !scenes.length) return;
     const sc = scenes[sceneIdx % scenes.length];
@@ -269,7 +273,7 @@ export function StoryboardTab({ initialBody }: { initialBody: string }) {
       </div>
       {playing && (
         <div style={{ position: "fixed", inset: 0, background: "#000f", zIndex: 90, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 32, textAlign: "center" }} role="dialog" aria-modal="true" aria-label={en ? "Montage player" : "Lecteur du montage"}>
-          <img key={current} src={images[current] && images[current] !== "error" ? images[current] : "/assets/template/image26.webp"} alt="" className="kb-zoom" style={{ width: "min(960px,100%)", maxHeight: "56dvh", objectFit: "cover", borderRadius: 20 }} />
+          <img key={current} src={images[current] && images[current] !== "error" ? images[current] : cover || "/assets/template/image26.webp"} alt="" className="kb-zoom" style={{ width: "min(960px,100%)", maxHeight: "56dvh", objectFit: "cover", borderRadius: 20 }} />
           <p style={{ maxWidth: 760, fontSize: 20, lineHeight: 1.6, marginTop: 22 }}>{scenes[current]}</p>
           <div style={{ display: "flex", gap: 8, marginTop: 16 }}>{scenes.map((_, i) => <span key={i} style={{ width: i === current ? 28 : 10, height: 10, borderRadius: 99, background: i === current ? "#EED58E" : "#ffffff33" }} />)}</div>
           <button className="brand-btn" style={{ marginTop: 24 }} onClick={() => setPlaying(false)}><Square size={18} />{en ? "Stop" : "Arrêter"}</button>

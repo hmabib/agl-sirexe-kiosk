@@ -107,3 +107,12 @@ test("Canvas Lara generates live in a full page",async({page})=>{
   await page.getByLabel("Sujet de l’image").fill("Port au lever du soleil");await page.getByRole("button",{name:/Générer l’image/}).click();
   await expect(page.getByRole("img",{name:"Visuel généré"})).toBeVisible();
 });
+
+test("Lara generates an image directly without opening Canvas",async({page})=>{
+  await page.route("**/api/gemini/stream",route=>route.fulfill({contentType:"text/event-stream",body:'data: {"t":"Voici votre visuel."}\n\ndata: {"done":true,"reply":"Voici votre visuel.","provider":"gemini","model":"test-model","actions":[{"type":"show_image","title":"Corridor au lever du soleil","image":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==","text":"Illustration générée."}]}\n\n'}));
+  await page.route("**/api/tts",r=>r.fulfill({status:503,body:"{}"}));
+  await page.goto("/accueil");await page.getByRole("button",{name:"Ouvrir Lara"}).click();await page.getByLabel("Question à Lara").fill("Crée une image du corridor au lever du soleil");await page.getByRole("button",{name:"Envoyer la question"}).click();
+  await expect(page.getByRole("dialog",{name:"Corridor au lever du soleil"})).toBeVisible();
+  await expect(page.getByRole("img",{name:"Visuel généré"})).toBeVisible();
+  await expect(page.getByRole("button",{name:"Télécharger l’image"})).toBeVisible();
+});

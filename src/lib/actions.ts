@@ -4,6 +4,7 @@ export type MaterialAction =
   | { type: "show_mining"; stage: "exploration" | "construction" | "production" | "export" | "closure" }
   | { type: "sheet"; title: string; body: string }
   | { type: "open_studio"; tab: "image" | "schema" | "storyboard" | "doc"; title: string; body: string }
+  | { type: "show_image"; title: string; image: string; text: string }
   | { type: "go"; screen: Screen };
 export const ALLOWED_SCREENS = ["home", "games", "mission", "explore", "build", "vision", "mining", "corporate", "appointment", "careers", "quotation", "satisfaction", "market"];
 export function parseToolAction(name?:string, args:Record<string,unknown>={ }):MaterialAction|null {
@@ -13,6 +14,7 @@ export function parseToolAction(name?:string, args:Record<string,unknown>={ }):M
   if(name==="open_brief"&&typeof args.title==="string"&&typeof args.body==="string")return {type:"sheet",title:args.title.slice(0,150),body:args.body.slice(0,2000)};
   if(name==="generate_image"&&typeof args.prompt==="string"&&args.prompt.trim())return {type:"open_studio",tab:"image",title:typeof args.style==="string"?`Illustration · ${args.style}`:"Illustration",body:args.prompt.slice(0,800)};
   if(name==="open_studio"&&["image","schema","storyboard","doc"].includes(String(args.tab))&&typeof args.title==="string"&&typeof args.body==="string")return {type:"open_studio",tab:args.tab as "image"|"schema"|"storyboard"|"doc",title:args.title.slice(0,150),body:args.body.slice(0,4000)};
+  if(name==="show_image"&&typeof args.title==="string"&&typeof args.image==="string"&&args.image.startsWith("data:image/")&&args.image.length<6000000)return {type:"show_image",title:args.title.slice(0,150),image:args.image,text:typeof args.text==="string"?args.text.slice(0,600):""};
   return null;
 }
 export function publishAction(action:MaterialAction) { if(typeof window!=="undefined")window.dispatchEvent(new CustomEvent("agl-action",{detail:action})); }
