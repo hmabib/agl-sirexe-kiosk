@@ -1,7 +1,7 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Session, LiveConnectConfig, LiveServerMessage } from "@google/genai";
-import { describeAction, parseToolAction, publishAction } from "./actions";
+import { describeAction, parseToolAction, publishAction, WEB_TOOLS, type MaterialAction } from "./actions";
 import { connectOpenAIRealtime, type RealtimeSession } from "./openai-realtime";
 
 export type LivePhase="idle"|"connecting"|"listening"|"thinking"|"speaking";
@@ -39,16 +39,27 @@ export function useLiveVoice(opts:LiveOptions){
   const interrupt=useCallback(()=>{stopAudio();rt.current?.interrupt();if(session.current||rt.current)setPhase("listening");},[stopAudio]);
 
   // Même exécution des outils pour la voix principale et pour le secours.
-  const runTool=useCallback((name?:string,args?:Record<string,unknown>)=>{
+  const runTool=useCallback(async(name?:string,args?:Record<string,unknown>):Promise<unknown>=>{
     if(name==="get_screen_context")return {context:options.current.getContext()};
+    // Recherche en ligne : exécutée par le serveur, sources affichées, résumé rendu au modèle.
+    if(name&&WEB_TOOLS.includes(name)){
+      const query=String(args?.query??"").trim();if(!query)return {ok:false,error:"Requête vide."};
+      try{
+        const r=await fetch("/api/web",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({kind:name==="get_news"?"news":"search",query,lang:options.current.lang})});
+        const j=await r.json();if(!j.ok)return {ok:false,error:"Aucun résultat en ligne pour le moment."};
+        const action:MaterialAction={type:"web",title:query.slice(0,120),web:{kind:j.kind,query,summary:j.summary,items:j.items??[]}};
+        publishAction(action);options.current.onActivity?.();
+        return {ok:true,summary:j.summary,results:(j.items??[]).map((i:{title:string;source?:string;date?:string})=>({title:i.title,source:i.source,date:i.date}))};
+      }catch{return {ok:false,error:"Recherche en ligne indisponible."};}
+    }
     const action=parseToolAction(name,args);
     if(!action)return {ok:false,error:"Arguments invalides : rien n’a été affiché."};
     publishAction(action);options.current.onActivity?.();
     return {ok:true,displayed:describeAction(action)};
   },[]);
   const handleToolCall=useCallback((m:LiveServerMessage)=>{
-    const responses=(m.toolCall?.functionCalls??[]).map(call=>({id:call.id,name:call.name,response:runTool(call.name,call.args)}));
-    if(responses.length)try{session.current?.sendToolResponse({functionResponses:responses});}catch{}
+    const calls=m.toolCall?.functionCalls??[];if(!calls.length)return;
+    void Promise.all(calls.map(async call=>({id:call.id,name:call.name,response:await runTool(call.name,call.args) as Record<string,unknown>}))).then(functionResponses=>{try{session.current?.sendToolResponse({functionResponses});}catch{}});
   },[runTool]);
 
   const receive=useCallback((m:LiveServerMessage)=>{

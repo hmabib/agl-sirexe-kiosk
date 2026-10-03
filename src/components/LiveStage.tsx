@@ -6,7 +6,7 @@ import { X, Download, ArrowRight, ArrowUpRight, Network, RefreshCw, TriangleAler
 import { useKiosk, logEvent, type Screen } from "@/lib/store";
 import { publishAction, type MaterialAction, type RouteId, type StepMode } from "@/lib/actions";
 import { brandImage, generateStudioImage, generateStudioVideo, STUDIO_LINKS } from "@/lib/studio";
-import type { Chart } from "@/lib/actions";
+import type { Chart, WebView } from "@/lib/actions";
 import { downloadFile } from "@/lib/requests";
 import { Orb } from "./Orb";
 import { FlowDiagram } from "./FlowDiagram";
@@ -14,14 +14,14 @@ import { sfx } from "@/lib/sound";
 
 const CinematicMap=dynamic(()=>import("./CinematicMap").then(m=>m.CinematicMap),{ssr:false,loading:()=> <div className="live-skeleton" style={{height:440}}>Envol vers la Côte d’Ivoire…</div>});
 
-type StageAction=Extract<MaterialAction,{type:"solution"|"show_route"|"sheet"|"show_image"|"render_image"|"render_video"|"chart"|"flow"}>;
+type StageAction=Extract<MaterialAction,{type:"solution"|"show_route"|"sheet"|"show_image"|"render_image"|"render_video"|"chart"|"flow"|"web"}>;
 interface View { id:number; action:StageAction }
 interface ImageState { status:"loading"|"ready"|"error"; src?:string; text?:string }
 const MAX_VIEWS=6;
 const MODE_ICON:Record<StepMode,typeof Truck>={road:Truck,rail:TrainFront,sea:Ship,air:Plane,port:Anchor,warehouse:Warehouse,customs:ShieldCheck,heavy_lift:Construction,mining:Pickaxe,digital:Satellite,people:Users};
 const MODE_LABEL:Record<StepMode,{fr:string;en:string}>={road:{fr:"Route",en:"Road"},rail:{fr:"Rail",en:"Rail"},sea:{fr:"Maritime",en:"Sea"},air:{fr:"Aérien",en:"Air"},port:{fr:"Port",en:"Port"},warehouse:{fr:"Entreposage",en:"Warehousing"},customs:{fr:"Douane",en:"Customs"},heavy_lift:{fr:"Heavy lift",en:"Heavy lift"},mining:{fr:"Mine",en:"Mine"},digital:{fr:"Visibilité",en:"Visibility"},people:{fr:"Équipe",en:"Team"}};
-const isStage=(a:MaterialAction):a is StageAction=>["solution","show_route","sheet","show_image","render_image","render_video","chart","flow"].includes(a.type);
-function titleOf(a:StageAction){return a.type==="solution"?a.solution.title:a.type==="chart"?a.chart.title:a.type==="flow"?a.flow.title:a.type==="show_route"?`Corridor ${a.route.replace("route-","")} · Côte d’Ivoire`:a.title;}
+const isStage=(a:MaterialAction):a is StageAction=>["solution","show_route","sheet","show_image","render_image","render_video","chart","flow","web"].includes(a.type);
+function titleOf(a:StageAction){return a.type==="solution"?a.solution.title:a.type==="chart"?a.chart.title:a.type==="flow"?a.flow.title:a.type==="web"?`${a.web.kind==="news"?"Actualités":"Recherche"} · ${a.title}`:a.type==="show_route"?`Corridor ${a.route.replace("route-","")} · Côte d’Ivoire`:a.title;}
 function imagePrompt(a:StageAction){return a.type==="render_image"?a.prompt:a.type==="solution"?a.solution.imagePrompt:undefined;}
 function screenLabel(s:Screen,en:boolean){const l=STUDIO_LINKS.find(x=>x.screen===s);if(l)return en?l.en:l.fr;const fr:Partial<Record<Screen,string>>={home:"Accueil",games:"Expériences",corporate:"Présentation",careers:"Emploi",satisfaction:"Avis",market:"Performance",canvas:"Canvas Lara"};return fr[s]??s;}
 
@@ -66,6 +66,7 @@ export function LiveStage(){
 
   function download(){
     if(a.type==="render_video"){if(videoUrl){const link=document.createElement("a");link.href=videoUrl;link.download="AGL-film.mp4";link.target="_blank";link.click();}return;}
+    if(a.type==="web"){downloadFile("Africa Global Logistics-sources.txt",[title,"",a.web.summary??"","",...a.web.items.map(i=>`• ${i.title}${i.source?` — ${i.source}`:""}${i.date?` (${new Date(i.date).toLocaleDateString("fr-FR")})`:""}\n  ${i.url}`)].join("\n"));return;}
     if(a.type==="flow"){const svg=document.querySelector(".flow-diagram svg");if(svg){const clone=svg.cloneNode(true) as SVGElement;clone.setAttribute("xmlns","http://www.w3.org/2000/svg");clone.setAttribute("style","background:#0b2147");downloadFile("Africa Global Logistics-schema.svg",`<?xml version="1.0" encoding="UTF-8"?>\n${clone.outerHTML}`,"image/svg+xml");}return;}
     if(a.type==="chart"){const c=a.chart;downloadFile("Africa Global Logistics-analyse.csv",["libellé;valeur"+(c.unit?` (${c.unit})`:""),...c.labels.map((l,i)=>`${l};${c.values[i]}`),"",`Source : ${c.source||"illustratif"}`].join("\n"),"text/csv");return;}
     if(a.type==="show_image"||(a.type==="render_image"&&img?.src)){const link=document.createElement("a");link.href=img?.src??"";link.download="Lara-image.png";link.click();return;}
@@ -100,6 +101,7 @@ export function LiveStage(){
           {a.type==="show_route"&&<><CinematicMap route={a.route} onSelectRoute={r=>{setRoute(r);setViews(vs=>vs.map(v=>v.id===view.id?{...v,action:{type:"show_route",route:r as RouteId}}:v));}}/><p className="ai-status">{en?"Principle link between real cities. Route and feasibility to be validated by a route survey.":"Liaison de principe entre des villes réelles. Itinéraire et faisabilité à valider par une étude de route."}</p></>}
           {a.type==="render_video"&&<BrandFilm key={view.id} prompt={a.prompt} en={en} onReady={url=>setVideos(m=>({...m,[view.id]:url}))}/>}
           {a.type==="chart"&&<ChartView chart={a.chart} en={en}/>}
+          {a.type==="web"&&<WebResults web={a.web} en={en}/>}
           {a.type==="flow"&&<FlowDiagram key={view.id} flow={a.flow} en={en}/>}
           {a.type==="sheet"&&<p className="live-summary" style={{whiteSpace:"pre-wrap"}}>{a.body}</p>}
           {prompt||isImage?<section style={{marginTop:a.type==="solution"?22:0}}>
@@ -119,7 +121,7 @@ export function LiveStage(){
         {a.solution.next.map(s=><button key={s} className="pill" style={{cursor:"pointer"}} onClick={()=>{close();k.go(s);}}>{screenLabel(s,en)} <ArrowUpRight size={14}/></button>)}
       </div>}
       <div className="button-row" style={{marginTop:0}}>
-        <button className="outline-btn" disabled={(isImage&&img?.status!=="ready")||(a.type==="render_video"&&!videoUrl)} onClick={()=>{download();k.touch();}}><Download size={18}/>{isImage?"Télécharger l’image":a.type==="render_video"?(en?"Download film":"Télécharger le film"):a.type==="chart"?(en?"Download data":"Télécharger les données"):a.type==="flow"?(en?"Download diagram":"Télécharger le schéma"):"Télécharger la fiche"}</button>
+        <button className="outline-btn" disabled={(isImage&&img?.status!=="ready")||(a.type==="render_video"&&!videoUrl)} onClick={()=>{download();k.touch();}}><Download size={18}/>{isImage?"Télécharger l’image":a.type==="render_video"?(en?"Download film":"Télécharger le film"):a.type==="chart"?(en?"Download data":"Télécharger les données"):a.type==="flow"?(en?"Download diagram":"Télécharger le schéma"):a.type==="web"?(en?"Download sources":"Télécharger les sources"):"Télécharger la fiche"}</button>
         {a.type==="solution"&&a.solution.steps.length>0&&<button className="outline-btn" onClick={()=>{close();publishAction({type:"open_studio",tab:"schema",title:a.solution.title,body:a.solution.steps.map(s=>s.label).join(" → ")});}}><Network size={18}/>{en?"Edit as diagram":"Modifier en schéma"}</button>}
         <button className="brand-btn" onClick={()=>{close();k.go(nextScreens[0]);}}>Continuer<ArrowRight size={18}/></button>
       </div>
@@ -170,5 +172,22 @@ function ChartView({chart,en}:{chart:Chart;en:boolean}){
       :(()=>{const pts=chart.values.map((v,i)=>[P+(W-P-24)*(n===1?0:i/(n-1)),H-P-(H-2*P)*v/max] as const);const d=pts.map((p,i)=>`${i?"L":"M"}${p[0]},${p[1]}`).join(" ");return <g><motion.path d={`${d} L${pts[n-1][0]},${H-P} L${pts[0][0]},${H-P} Z`} fill="#eed58e1f" initial={{opacity:0}} animate={{opacity:1}} transition={{delay:.6}}/><motion.path d={d} fill="none" stroke="#EED58E" strokeWidth={3.5} strokeLinecap="round" initial={{pathLength:0}} animate={{pathLength:1}} transition={{duration:1.2,ease:"easeInOut"}}/>{pts.map((p,i)=><g key={i}><circle cx={p[0]} cy={p[1]} r={5} fill="#04122a" stroke="#EED58E" strokeWidth={2.5}/><text x={p[0]} y={p[1]-12} textAnchor="middle" fill="#fff" fontSize={12} fontWeight={700}>{fmt(chart.values[i])}</text><text x={p[0]} y={H-P+20} textAnchor="middle" fill="#9dc0e8" fontSize={12}>{chart.labels[i]}</text></g>)}</g>;})()}
     </svg>}
     <p className="ai-status" style={{marginTop:10}}>{chart.source?`${en?"Source":"Source"} : ${chart.source}`:(en?"Illustrative breakdown — not operational data.":"Répartition illustrative — pas une donnée opérationnelle.")}</p>
+  </section>;
+}
+
+// Résultats en ligne : synthèse sourcée, sources datées ; un QR code ouvre l’article sur le téléphone du visiteur.
+function WebResults({web,en}:{web:WebView;en:boolean}){
+  const [open,setOpen]=useState<number|null>(null);const [qrs,setQrs]=useState<Record<string,string>>({});
+  const openUrl=open===null?null:web.items[open]?.url??null;const qr=openUrl?qrs[openUrl]:"";
+  useEffect(()=>{if(!openUrl)return;let stop=false;void import("qrcode").then(Q=>Q.toDataURL(openUrl,{margin:1,width:220,color:{dark:"#04122a",light:"#ffffff"}})).then(u=>{if(!stop)setQrs(m=>({...m,[openUrl]:u}));}).catch(()=>{});return()=>{stop=true;};},[openUrl]);
+  const fmt=(d?:string)=>{const t=d?Date.parse(d):NaN;return Number.isFinite(t)?new Date(t).toLocaleDateString(en?"en-GB":"fr-FR",{day:"numeric",month:"short",year:"numeric"}):"";};
+  return <section>
+    {web.summary&&<p className="live-summary">{web.summary}</p>}
+    <div className="web-list">{web.items.map((it,i)=><motion.button key={it.url} className={`web-item ${open===i?"open":""}`} initial={{opacity:0,y:12}} animate={{opacity:1,y:0}} transition={{delay:.08*i}} onClick={()=>setOpen(open===i?null:i)} aria-expanded={open===i}>
+      <span className="web-meta">{it.source??new URL(it.url).hostname}{fmt(it.date)&&` · ${fmt(it.date)}`}</span>
+      <strong>{it.title}</strong>
+      {open===i&&<span className="web-qr">{qr?<img src={qr} alt={en?"QR code to open the article":"QR code pour ouvrir l’article"}/>:null}<em>{en?"Scan to read on your phone":"Scannez pour lire sur votre téléphone"}</em></span>}
+    </motion.button>)}</div>
+    <p className="ai-status" style={{marginTop:12}}>{en?"Live web results — external sources, not Africa Global Logistics positions.":"Résultats en ligne en direct — sources externes, pas des positions d’Africa Global Logistics."}</p>
   </section>;
 }

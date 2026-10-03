@@ -4,7 +4,8 @@ import { GoogleGenAI, Modality, type Content, type Part } from "@google/genai";
 import { AGL_SYSTEM_PROMPT, VISION_VOICE_PROMPT } from "./prompt";
 import { KNOWLEDGE_FACTS } from "./content";
 import { AGL_TOOLS, OPENAI_TOOLS } from "./ai-tools";
-import { parseToolAction, type MaterialAction } from "./actions";
+import { parseToolAction, WEB_TOOLS, type MaterialAction } from "./actions";
+import { newsFeed, webSearch } from "./web";
 
 export const GEMINI_TEXT_DEFAULT=process.env.GEMINI_MODEL||"gemini-3.8-flash";
 export const GEMINI_FALLBACKS=[GEMINI_TEXT_DEFAULT,"gemini-flash-latest"];
@@ -17,6 +18,17 @@ export function resolveKey(){const key=(process.env.GEMINI_API_KEY||"").trim();r
 let knowledgeCache:string|null=null;
 export async function getKnowledge(){if(knowledgeCache!==null)return knowledgeCache;let docs="";try{const dir=path.join(process.cwd(),"knowledge");for(const f of (await fs.readdir(dir)).filter(f=>f.endsWith(".md")).slice(0,12))docs+=`\n--- ${f} ---\n${(await fs.readFile(path.join(dir,f),"utf8")).slice(0,6000)}`;}catch{}knowledgeCache=KNOWLEDGE_FACTS+docs.slice(0,16000);return knowledgeCache;}
 
+// Outil web exécuté côté serveur : la vue des sources s’affiche, le résultat compact revient au modèle.
+async function runWebTool(name:string,args:Record<string,unknown>|undefined,lang:string|undefined,onAction?:(a:MaterialAction)=>void){
+  const query=String(args?.query??"").trim().slice(0,300);
+  if(!query)return {ok:false,error:"Requête vide."};
+  const result=name==="get_news"?await newsFeed(query,lang):await webSearch(query,lang);
+  if(!result.ok)return {ok:false,error:"Aucun résultat en ligne pour le moment."};
+  const action:MaterialAction={type:"web",title:query.slice(0,120),web:{kind:result.kind,query,summary:result.summary,items:result.items}};
+  onAction?.(action);
+  return {ok:true,summary:result.summary,results:result.items.map(i=>({title:i.title,source:i.source,date:i.date}))};
+}
+const MAX_TOOL_ROUNDS=3;
 export interface ChatTurn {role:"user"|"ai";text:string}
 export interface ReplyOptions {message:string;context?:unknown;image?:string;lang?:string;modelOverride?:string;voice?:boolean;history?:ChatTurn[];deepThink?:boolean}
 export interface ReplyResult {reply:string;provider:string;model:string;actions:MaterialAction[];degraded?:boolean}
@@ -39,8 +51,16 @@ export async function getReply(opts:ReplyOptions,onToken?:(text:string)=>void,on
     try {
       const config={systemInstruction:system,maxOutputTokens:opts.deepThink?4000:1800,tools:[{functionDeclarations:AGL_TOOLS}],httpOptions:{timeout:25000},...(opts.deepThink?{thinkingConfig:{thinkingBudget:2048}}:{})};
       let reply="";const actions:MaterialAction[]=[];
-      const stream=await ai.models.generateContentStream({model,contents:[...history,{role:"user",parts}],config});
-      for await(const chunk of stream){const text=chunk.candidates?.[0]?.content?.parts?.filter(p=>p.text&&!p.thought).map(p=>p.text).join("")??"";if(text){reply+=text;onToken?.(text);emitted=true;}for(const call of chunk.functionCalls??[]){const action=parseToolAction(call.name,call.args);if(action){actions.push(action);onAction?.(action);}}}
+      let contents:Content[]=[...history,{role:"user",parts}];
+      for(let round=0;round<MAX_TOOL_ROUNDS;round++){
+        const stream=await ai.models.generateContentStream({model,contents,config});
+        const webCalls:{name:string;args?:Record<string,unknown>}[]=[];
+        for await(const chunk of stream){const text=chunk.candidates?.[0]?.content?.parts?.filter(p=>p.text&&!p.thought).map(p=>p.text).join("")??"";if(text){reply+=text;onToken?.(text);emitted=true;}for(const call of chunk.functionCalls??[]){if(call.name&&WEB_TOOLS.includes(call.name)){webCalls.push({name:call.name,args:call.args});continue;}const action=parseToolAction(call.name,call.args);if(action){actions.push(action);onAction?.(action);}}}
+        if(!webCalls.length)break;
+        // Recherche faite : le modèle reprend avec les résultats pour répondre.
+        const results=await Promise.all(webCalls.map(c=>runWebTool(c.name,c.args,opts.lang,a=>{actions.push(a);onAction?.(a);})));
+        contents=[...contents,{role:"model",parts:webCalls.map(c=>({functionCall:{name:c.name,args:c.args}}))},{role:"user",parts:webCalls.map((c,i)=>({functionResponse:{name:c.name,response:results[i]}}))}];
+      }
       if(!reply&&actions.length){reply=opts.lang==="en"?"I’m opening the requested view for you.":"J’ouvre la vue demandée pour vous.";onToken?.(reply);}
       if(reply)return {reply,provider:"gemini",model,actions};
     } catch(e){const msg=e instanceof Error?e.message:"";if(isQuota(0,msg))quota++;console.warn("Lara upstream unavailable",model,e instanceof Error?`${e.name} ${msg.slice(0,200)}`:"unknown");if(emitted)return {reply:opts.lang==="en"?"The connection was interrupted. Please try again.":"La connexion a été interrompue. Réessayez dans un instant.",provider:"gemini",model,actions:[],degraded:true};}
@@ -60,10 +80,13 @@ async function openaiReply(opts:ReplyOptions,system:string,onToken?:(text:string
   const messages=[{role:"system",content:system},...(Array.isArray(opts.history)?opts.history:[]).slice(-12).filter(t=>typeof t.text==="string").map(t=>({role:t.role==="ai"?"assistant":"user",content:t.text.slice(0,2500)})),{role:"user",content:image?[{type:"text",text},{type:"image_url",image_url:{url:image}}]:text}];
   let emitted=false;
   try{
-    const r=await fetch("https://api.openai.com/v1/chat/completions",{method:"POST",headers:{Authorization:`Bearer ${k}`,"Content-Type":"application/json"},body:JSON.stringify({model:OPENAI_TEXT_MODEL,messages,tools:OPENAI_TOOLS,stream:true,max_completion_tokens:opts.deepThink?4000:1800,...(opts.deepThink?{reasoning_effort:"medium"}:{})}),signal:AbortSignal.timeout(30000)});
-    if(!r.ok||!r.body){const j=await r.json().catch(()=>({}));const msg=j?.error?.message??"";if(isQuota(r.status,msg))cooldown.set("openai-text",Date.now()+COOLDOWN_MS);console.warn("Lara backup unavailable",r.status,msg.slice(0,200));return null;}
-    const reader=r.body.getReader();const dec=new TextDecoder();let buf="";let reply="";
-    const calls:Record<number,{name:string;args:string}>={};
+    let reply="";const actions:MaterialAction[]=[];
+    const convo:unknown[]=[...messages];
+    for(let round=0;round<MAX_TOOL_ROUNDS;round++){
+    const r=await fetch("https://api.openai.com/v1/chat/completions",{method:"POST",headers:{Authorization:`Bearer ${k}`,"Content-Type":"application/json"},body:JSON.stringify({model:OPENAI_TEXT_MODEL,messages:convo,tools:OPENAI_TOOLS,stream:true,max_completion_tokens:opts.deepThink?4000:1800,...(opts.deepThink?{reasoning_effort:"medium"}:{})}),signal:AbortSignal.timeout(30000)});
+    if(!r.ok||!r.body){const j=await r.json().catch(()=>({}));const msg=j?.error?.message??"";if(isQuota(r.status,msg))cooldown.set("openai-text",Date.now()+COOLDOWN_MS);console.warn("Lara backup unavailable",r.status,msg.slice(0,200));if(reply||actions.length)break;return null;}
+    const reader=r.body.getReader();const dec=new TextDecoder();let buf="";
+    const calls:Record<number,{id:string;name:string;args:string}>={};
     for(;;){
       const {done,value}=await reader.read();if(done)break;
       buf+=dec.decode(value,{stream:true});const lines=buf.split("\n");buf=lines.pop()??"";
@@ -71,12 +94,16 @@ async function openaiReply(opts:ReplyOptions,system:string,onToken?:(text:string
         const data=line.replace(/^data:\s*/,"").trim();if(!data||data==="[DONE]"||!line.startsWith("data:"))continue;
         try{const d=JSON.parse(data).choices?.[0]?.delta;if(!d)continue;
           if(d.content){reply+=d.content;onToken?.(d.content);emitted=true;}
-          for(const c of d.tool_calls??[]){const slot=calls[c.index]??={name:"",args:""};if(c.function?.name)slot.name+=c.function.name;if(c.function?.arguments)slot.args+=c.function.arguments;}
+          for(const c of d.tool_calls??[]){const slot=calls[c.index]??={id:"",name:"",args:""};if(c.id)slot.id=c.id;if(c.function?.name)slot.name+=c.function.name;if(c.function?.arguments)slot.args+=c.function.arguments;}
         }catch{/* fragment incomplet */}
       }
     }
-    const actions:MaterialAction[]=[];
-    for(const c of Object.values(calls)){try{const action=parseToolAction(c.name,JSON.parse(c.args||"{}"));if(action){actions.push(action);onAction?.(action);}}catch{/* arguments invalides */}}
+    const webCalls:{id:string;name:string;args:Record<string,unknown>}[]=[];
+    for(const c of Object.values(calls)){try{const args=JSON.parse(c.args||"{}");if(WEB_TOOLS.includes(c.name)){webCalls.push({id:c.id,name:c.name,args});continue;}const action=parseToolAction(c.name,args);if(action){actions.push(action);onAction?.(action);}}catch{/* arguments invalides */}}
+    if(!webCalls.length)break;
+    const results=await Promise.all(webCalls.map(c=>runWebTool(c.name,c.args,opts.lang,a=>{actions.push(a);onAction?.(a);})));
+    convo.push({role:"assistant",content:null,tool_calls:webCalls.map(c=>({id:c.id,type:"function",function:{name:c.name,arguments:JSON.stringify(c.args)}}))},...webCalls.map((c,i)=>({role:"tool",tool_call_id:c.id,content:JSON.stringify(results[i])})));
+    }
     if(!reply&&actions.length){reply=opts.lang==="en"?"I’m opening the requested view for you.":"J’ouvre la vue demandée pour vous.";onToken?.(reply);}
     return reply?{reply,provider:"openai",model:OPENAI_TEXT_MODEL,actions}:null;
   }catch(e){console.warn("Lara backup unavailable",e instanceof Error?e.message.slice(0,200):"unknown");return emitted?{reply:opts.lang==="en"?"The connection was interrupted. Please try again.":"La connexion a été interrompue. Réessayez dans un instant.",provider:"openai",model:OPENAI_TEXT_MODEL,actions:[],degraded:true}:null;}

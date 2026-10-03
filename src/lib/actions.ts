@@ -6,6 +6,10 @@ export interface SolutionStep { label: string; detail: string; mode?: StepMode }
 export interface SolutionPoint { label: string; text: string }
 export type ChartKind = "bar" | "line" | "donut";
 export interface Chart { title: string; kind: ChartKind; labels: string[]; values: number[]; unit?: string; source?: string }
+export interface WebItem { title: string; url: string; source?: string; date?: string }
+export interface WebView { kind: "search" | "news"; query: string; summary?: string; items: WebItem[] }
+// Outils de données : exécutés côté serveur, leur résultat revient au modèle avant la réponse.
+export const WEB_TOOLS = ["web_search", "get_news"];
 export type FlowKind = "mine" | "plant" | "truck" | "rail" | "port" | "ship" | "plane" | "warehouse" | "customs" | "hub" | "market";
 export interface FlowNode { label: string; kind: FlowKind; detail?: string }
 export interface FlowLink { from: number; to: number; mode: StepMode; label?: string }
@@ -31,6 +35,7 @@ export type MaterialAction =
   | { type: "render_video"; title: string; prompt: string }
   | { type: "chart"; chart: Chart }
   | { type: "flow"; flow: Flow }
+  | { type: "web"; title: string; web: WebView }
   | { type: "go"; screen: Screen };
 export const ALLOWED_SCREENS = ["home", "games", "mission", "explore", "build", "vision", "mining", "corporate", "appointment", "careers", "quotation", "satisfaction", "market", "canvas"];
 export const ROUTES: RouteId[] = ["route-A", "route-B", "route-C"];
@@ -74,6 +79,7 @@ export function describeAction(a: MaterialAction): string {
   switch (a.type) {
     case "solution": return `Vue solution « ${a.solution.title} » affichée : ${a.solution.steps.length} étapes${a.solution.route ? `, carte ${a.solution.route}` : ""}${a.solution.imagePrompt ? ", visuel en cours de création" : ""}.`;
     case "render_video": return "Film en cours de tournage, il s’affiche dans la vue dans une vingtaine de secondes avec le logo Africa Global Logistics.";
+    case "web": return `${a.web.kind === "news" ? "Fil d’actualités" : "Résultats web"} « ${a.title} » affiché (${a.web.items.length} sources).`;
     case "flow": return `Schéma animé « ${a.flow.title} » affiché : ${a.flow.nodes.length} maillons, ${a.flow.links.length} liaisons.`;
     case "chart": return `Graphique « ${a.chart.title} » affiché (${a.chart.labels.length} valeurs${a.chart.source?`, source ${a.chart.source}`:", illustratif"}).`;
     case "render_image": return "Illustration en cours de création, elle s’affiche dans la vue dans quelques secondes.";

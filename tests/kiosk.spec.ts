@@ -154,3 +154,12 @@ test("a logistics diagram request draws an animated flow with inferred modes",as
   await expect(page.locator(".flow-legend")).toContainText("Rail");await expect(page.locator(".flow-legend")).toContainText("Maritime");
   const dl=page.waitForEvent("download");await page.getByRole("button",{name:"Télécharger le schéma"}).click();expect((await dl).suggestedFilename()).toContain(".svg");
 });
+
+test("web results show dated sources and a QR code to read on a phone",async({page})=>{
+  const web={type:"web",title:"port d’Abidjan",web:{kind:"news",query:"port d’Abidjan",summary:"Le port d’Abidjan poursuit sa croissance.",items:[{title:"Port d’Abidjan : une croissance record",url:"https://example.com/article",source:"Team France Export",date:"Wed, 01 Oct 2026 08:00:00 GMT"}]}};
+  await page.route("**/api/gemini/stream",r=>r.fulfill({contentType:"text/event-stream",body:`data: ${JSON.stringify({action:web})}\n\ndata: ${JSON.stringify({done:true,reply:"Voici les dernières actualités.",provider:"x",model:"x",actions:[web]})}\n\n`}));
+  await page.route("**/api/tts",r=>r.fulfill({status:503,body:"{}"}));
+  await page.goto("/accueil");await page.getByRole("button",{name:"Ouvrir Lara"}).click();await page.getByLabel("Question à Lara").fill("Actualités du port");await page.getByRole("button",{name:"Envoyer la question"}).click();
+  const view=page.getByRole("dialog",{name:"Actualités · port d’Abidjan"});await expect(view).toBeVisible();await expect(view.getByText(/Team France Export/)).toBeVisible();
+  await view.getByRole("button",{name:/croissance record/}).click();await expect(view.getByRole("img",{name:"QR code pour ouvrir l’article"})).toBeVisible();
+});
