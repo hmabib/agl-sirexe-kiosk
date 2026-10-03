@@ -42,6 +42,14 @@ export function useLiveVoice(opts:LiveOptions){
   const runTool=useCallback(async(name?:string,args?:Record<string,unknown>):Promise<unknown>=>{
     if(name==="get_screen_context")return {context:options.current.getContext()};
     // Recherche en ligne : exécutée par le serveur, sources affichées, résumé rendu au modèle.
+    if(name==="open_page"){
+      try{
+        const r=await fetch("/api/web/page",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({url:String(args?.url??"")})});
+        const j=await r.json();if(!j.ok)return {ok:false,error:"Page inaccessible depuis la borne."};
+        publishAction({type:"page",page:j.page});options.current.onActivity?.();
+        return {ok:true,title:j.page.title,site:j.page.site,content:[j.page.description,...j.page.paragraphs].filter(Boolean).join("\n").slice(0,4000)};
+      }catch{return {ok:false,error:"Page inaccessible depuis la borne."};}
+    }
     if(name&&WEB_TOOLS.includes(name)){
       const query=String(args?.query??"").trim();if(!query)return {ok:false,error:"Requête vide."};
       try{

@@ -6,6 +6,7 @@ import { KNOWLEDGE_FACTS } from "./content";
 import { AGL_TOOLS, OPENAI_TOOLS } from "./ai-tools";
 import { parseToolAction, WEB_TOOLS, type MaterialAction } from "./actions";
 import { newsFeed, webSearch } from "./web";
+import { readPage } from "./page";
 
 export const GEMINI_TEXT_DEFAULT=process.env.GEMINI_MODEL||"gemini-3.8-flash";
 export const GEMINI_FALLBACKS=[GEMINI_TEXT_DEFAULT,"gemini-flash-latest"];
@@ -20,6 +21,12 @@ export async function getKnowledge(){if(knowledgeCache!==null)return knowledgeCa
 
 // Outil web exécuté côté serveur : la vue des sources s’affiche, le résultat compact revient au modèle.
 async function runWebTool(name:string,args:Record<string,unknown>|undefined,lang:string|undefined,onAction?:(a:MaterialAction)=>void){
+  if(name==="open_page"){
+    const page=await readPage(String(args?.url??"").trim().slice(0,2000));
+    if(!page)return {ok:false,error:"Page inaccessible depuis la borne."};
+    onAction?.({type:"page",page});
+    return {ok:true,title:page.title,site:page.site,content:[page.description,...page.paragraphs].filter(Boolean).join("\n").slice(0,4000)};
+  }
   const query=String(args?.query??"").trim().slice(0,300);
   if(!query)return {ok:false,error:"Requête vide."};
   const result=name==="get_news"?await newsFeed(query,lang):await webSearch(query,lang);

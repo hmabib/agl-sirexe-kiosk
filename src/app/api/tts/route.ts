@@ -9,11 +9,15 @@ export const dynamic = "force-dynamic";
 export async function POST(req: NextRequest) {
   try {
     const { text, lang } = await req.json();
+    // Voix premium d’abord (voix féminine française), puis voix Gemini, puis secours OpenAI.
+    const { elevenSpeech } = await import("@/lib/eleven");
+    const premium = await elevenSpeech(String(text ?? "").slice(0, 500), lang);
+    if (premium) return NextResponse.json({ ok: true, audio: premium });
     const { resolveKey } = await import("@/lib/ai-server");
     const { key, provider } = resolveKey();
-    if (!key || provider !== "gemini") return NextResponse.json({ ok: false }, { status: 503 });
+
     const models = [GEMINI_TTS_MODEL, "gemini-2.5-flash-preview-tts"];
-    for (const m of [...new Set(models)]) {
+    for (const m of key && provider === "gemini" ? [...new Set(models)] : []) {
       try {
         const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent?key=${key}`, {
           method: "POST",

@@ -9,7 +9,13 @@ export interface Chart { title: string; kind: ChartKind; labels: string[]; value
 export interface WebItem { title: string; url: string; source?: string; date?: string }
 export interface WebView { kind: "search" | "news"; query: string; summary?: string; items: WebItem[] }
 // Outils de données : exécutés côté serveur, leur résultat revient au modèle avant la réponse.
-export const WEB_TOOLS = ["web_search", "get_news"];
+export const WEB_TOOLS = ["web_search", "get_news", "open_page"];
+export interface PageData { url: string; title: string; site: string; description?: string; image?: string; paragraphs: string[]; embeddable: boolean }
+export type AudioKind = "voiceover" | "sound" | "music";
+export type Model3DKind = "container" | "truck" | "crane" | "ship" | "wagon" | "custom";
+export const MODEL_3D: Model3DKind[] = ["container", "truck", "crane", "ship", "wagon", "custom"];
+export type PartShape = "box" | "cylinder" | "sphere" | "cone";
+export interface Part3D { name: string; explanation: string; shape?: PartShape; size?: [number, number, number]; position?: [number, number, number]; color?: string }
 export type FlowKind = "mine" | "plant" | "truck" | "rail" | "port" | "ship" | "plane" | "warehouse" | "customs" | "hub" | "market";
 export interface FlowNode { label: string; kind: FlowKind; detail?: string }
 export interface FlowLink { from: number; to: number; mode: StepMode; label?: string }
@@ -32,10 +38,13 @@ export type MaterialAction =
   | { type: "show_image"; title: string; image: string; text: string }
   | { type: "render_image"; title: string; prompt: string }
   | { type: "solution"; solution: Solution }
-  | { type: "render_video"; title: string; prompt: string }
+  | { type: "render_video"; title: string; prompt: string; narration?: string; soundscape?: string }
   | { type: "chart"; chart: Chart }
   | { type: "flow"; flow: Flow }
   | { type: "web"; title: string; web: WebView }
+  | { type: "page"; page: PageData }
+  | { type: "render_audio"; title: string; kind: AudioKind; text: string; seconds?: number }
+  | { type: "model3d"; title: string; object: Model3DKind; parts: Part3D[]; intro?: string }
   | { type: "go"; screen: Screen };
 export const ALLOWED_SCREENS = ["home", "games", "mission", "explore", "build", "vision", "mining", "corporate", "appointment", "careers", "quotation", "satisfaction", "market", "canvas"];
 export const ROUTES: RouteId[] = ["route-A", "route-B", "route-C"];
@@ -57,7 +66,12 @@ export function parseToolAction(name?:string, args:Record<string,unknown>={ }):M
   if(name==="show_route"&&ROUTES.includes(args.route as RouteId))return {type:"show_route",route:args.route as RouteId};
   if(name==="show_mining"&&MINING_STAGES.includes(args.stage as MiningStage))return {type:"show_mining",stage:args.stage as MiningStage};
   if(name==="show_solution"){const solution=parseSolution(args);return solution?{type:"solution",solution}:null;}
-  if(name==="generate_video"&&typeof args.prompt==="string"&&args.prompt.trim())return {type:"render_video",title:str(args.title,150)||"Film Africa Global Logistics",prompt:args.prompt.slice(0,1500)};
+  if(name==="generate_video"&&typeof args.prompt==="string"&&args.prompt.trim())return {type:"render_video",title:str(args.title,150)||"Film Africa Global Logistics",prompt:args.prompt.slice(0,1500),narration:str(args.narration,600)||undefined,soundscape:str(args.soundscape,300)||undefined};
+  if(name==="generate_audio"&&typeof args.text==="string"&&args.text.trim()){const kind=(["voiceover","sound","music"].includes(String(args.kind))?args.kind:"voiceover") as AudioKind;return {type:"render_audio",title:str(args.title,150)||(kind==="music"?"Musique":kind==="sound"?"Ambiance sonore":"Voix off"),kind,text:args.text.slice(0,2000),seconds:Number.isFinite(Number(args.seconds))?Math.min(60,Math.max(3,Number(args.seconds))):undefined};}
+  if(name==="show_3d"&&MODEL_3D.includes(args.object as Model3DKind)){const shapes=["box","cylinder","sphere","cone"];const vec=(v:unknown,min:number,max:number):[number,number,number]|undefined=>Array.isArray(v)&&v.length===3&&v.every(x=>Number.isFinite(Number(x)))?v.map(x=>Math.min(max,Math.max(min,Number(x)))) as [number,number,number]:undefined;
+    const parts=list(args.parts,14).map(p=>({name:str(p.name,40),explanation:str(p.explanation,300),shape:shapes.includes(String(p.shape))?p.shape as PartShape:undefined,size:vec(p.size,0.05,12),position:vec(p.position,-12,12),color:/^#[0-9a-f]{6}$/i.test(String(p.color))?String(p.color):undefined})).filter(p=>p.name);
+    if(args.object==="custom"&&parts.length<2)return null;
+    return {type:"model3d",title:str(args.title,150)||"Vue éclatée",object:args.object as Model3DKind,parts,intro:str(args.intro,400)||undefined};}
   if(name==="show_flow"){
     const title=str(args.title,150);
     const nodes=list(args.nodes,8).map(n=>({label:str(n.label,40),kind:(FLOW_KINDS.includes(n.kind as FlowKind)?n.kind:"hub") as FlowKind,detail:str(n.detail,120)||undefined})).filter(n=>n.label);
@@ -79,6 +93,9 @@ export function describeAction(a: MaterialAction): string {
   switch (a.type) {
     case "solution": return `Vue solution « ${a.solution.title} » affichée : ${a.solution.steps.length} étapes${a.solution.route ? `, carte ${a.solution.route}` : ""}${a.solution.imagePrompt ? ", visuel en cours de création" : ""}.`;
     case "render_video": return "Film en cours de tournage, il s’affiche dans la vue dans une vingtaine de secondes avec le logo Africa Global Logistics.";
+    case "page": return `Page « ${a.page.title} » (${a.page.site}) ouverte en mode lecture${a.page.embeddable ? ", page d’origine disponible" : ""}.`;
+    case "render_audio": return a.kind === "music" ? "Musique en cours de composition, elle se lit dans la vue." : a.kind === "sound" ? "Ambiance sonore en cours de création, elle se lit dans la vue." : "Voix off en cours d’enregistrement, elle se lit dans la vue.";
+    case "model3d": return `Vue 3D éclatée « ${a.title} » affichée : ${a.object}, pièces numérotées avec leurs explications, visite guidée disponible.`;
     case "web": return `${a.web.kind === "news" ? "Fil d’actualités" : "Résultats web"} « ${a.title} » affiché (${a.web.items.length} sources).`;
     case "flow": return `Schéma animé « ${a.flow.title} » affiché : ${a.flow.nodes.length} maillons, ${a.flow.links.length} liaisons.`;
     case "chart": return `Graphique « ${a.chart.title} » affiché (${a.chart.labels.length} valeurs${a.chart.source?`, source ${a.chart.source}`:", illustratif"}).`;

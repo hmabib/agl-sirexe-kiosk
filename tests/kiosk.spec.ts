@@ -163,3 +163,30 @@ test("web results show dated sources and a QR code to read on a phone",async({pa
   const view=page.getByRole("dialog",{name:"Actualités · port d’Abidjan"});await expect(view).toBeVisible();await expect(view.getByText(/Team France Export/)).toBeVisible();
   await view.getByRole("button",{name:/croissance record/}).click();await expect(view.getByRole("img",{name:"QR code pour ouvrir l’article"})).toBeVisible();
 });
+
+test("Lara opens a web page in reading mode with a QR code",async({page})=>{
+  const pg={type:"page",page:{url:"https://www.portabidjan.ci/fr",title:"Port Autonome d’Abidjan",site:"portabidjan.ci",description:"Premier port d’Afrique de l’Ouest.",paragraphs:["Le Port Autonome d’Abidjan accompagne le développement des échanges de la sous-région."],embeddable:false}};
+  await page.route("**/api/gemini/stream",r=>r.fulfill({contentType:"text/event-stream",body:`data: ${JSON.stringify({action:pg})}\n\ndata: ${JSON.stringify({done:true,reply:"Voici la page.",provider:"x",model:"x",actions:[pg]})}\n\n`}));
+  await page.route("**/api/tts",r=>r.fulfill({status:503,body:"{}"}));
+  await page.goto("/accueil");await page.getByRole("button",{name:"Ouvrir Lara"}).click();await page.getByLabel("Question à Lara").fill("Ouvre le site du port");await page.getByRole("button",{name:"Envoyer la question"}).click();
+  const view=page.getByRole("dialog",{name:"Port Autonome d’Abidjan"});await expect(view).toBeVisible();await expect(view.getByText(/accompagne le développement/)).toBeVisible();await expect(view.getByRole("img",{name:"QR code pour ouvrir la page"})).toBeVisible();
+});
+
+test("an exploded 3D view lists numbered parts with explanations",async({page})=>{
+  const m={type:"model3d",title:"Conteneur 20 pieds",object:"container",parts:[],intro:"Visite éclatée du conteneur."};
+  await page.route("**/api/gemini/stream",r=>r.fulfill({contentType:"text/event-stream",body:`data: ${JSON.stringify({action:m})}\n\ndata: ${JSON.stringify({done:true,reply:"Voici.",provider:"x",model:"x",actions:[m]})}\n\n`}));
+  await page.route("**/api/tts",r=>r.fulfill({status:503,body:"{}"}));
+  await page.goto("/accueil");await page.getByRole("button",{name:"Ouvrir Lara"}).click();await page.getByLabel("Question à Lara").fill("Décompose un conteneur");await page.getByRole("button",{name:"Envoyer la question"}).click();
+  const view=page.getByRole("dialog",{name:"Conteneur 20 pieds"});await expect(view.locator(".x3d-list li")).toHaveCount(7,{timeout:20000});
+  await view.locator(".x3d-list button").filter({hasText:"Portes et scellés"}).click();await expect(view.locator(".x3d-card")).toContainText("scellé");
+  await expect(view.getByRole("button",{name:"Visite guidée"})).toBeVisible();
+});
+
+test("generated audio plays with a live waveform",async({page})=>{
+  const au={type:"render_audio",title:"Ambiance portuaire",kind:"sound",text:"port ambience"};
+  await page.route("**/api/gemini/stream",r=>r.fulfill({contentType:"text/event-stream",body:`data: ${JSON.stringify({action:au})}\n\ndata: ${JSON.stringify({done:true,reply:"Écoutez.",provider:"x",model:"x",actions:[au]})}\n\n`}));
+  await page.route("**/api/studio/audio",r=>r.fulfill({contentType:"application/json",body:JSON.stringify({ok:true,audio:"data:audio/mpeg;base64,SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjU4LjI5LjEwMAAAAAAAAAAAAAAA//tQAAAAAAAAAAAAAAAAAAAAAAAASW5mbwAAAA8AAAACAAABhgC7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7//////////////////////////////////////////////////////////////////8AAAAATGF2YzU4LjU0AAAAAAAAAAAAAAAAJAAAAAAAAAAAAYYoRBqpAAAAAAAAAAAAAAAAAAAA"})}));
+  await page.route("**/api/tts",r=>r.fulfill({status:503,body:"{}"}));
+  await page.goto("/accueil");await page.getByRole("button",{name:"Ouvrir Lara"}).click();await page.getByLabel("Question à Lara").fill("Ambiance de port");await page.getByRole("button",{name:"Envoyer la question"}).click();
+  const view=page.getByRole("dialog",{name:"Ambiance portuaire"});await expect(view.locator("audio")).toBeVisible();await expect(view.locator(".audio-wave")).toBeVisible();await expect(view.getByRole("button",{name:"Télécharger l’audio"})).toBeEnabled();
+});

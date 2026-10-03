@@ -84,8 +84,13 @@ Lara choisit l’outil selon la demande et peut en combiner plusieurs : vue solu
 | Images | OpenAI (`OPENAI_IMAGE_MODEL`) → Gemini (modèles découverts) | fal (`FAL_IMAGE_MODEL`) |
 | Films | fal MiniMax H3 (`FAL_VIDEO_MODEL`) | — |
 | Recherche web | OpenAI (recherche intégrée) | Google News RSS |
+| Voix lue | ElevenLabs (voix féminine française, `ELEVENLABS_VOICE_ID`) | Gemini TTS, puis OpenAI |
+| Voix off, ambiances, musique | ElevenLabs (`generate_audio`, narration et ambiance des films) | — |
+| Pages web | Lecture serveur sécurisée (`open_page`, adresses publiques uniquement) | Fiche minimale + QR code |
 
-Un fournisseur sans quota ou sans crédit est mis de côté 10 minutes. Aucun nom de modèle n’est affiché sur la borne. Variables serveur : `GEMINI_API_KEY`, `OPENAI_API_KEY`, `FAL_KEY` (jamais exposées au navigateur).
+Un fournisseur sans quota ou sans crédit est mis de côté 10 minutes. Aucun nom de modèle n’est affiché sur la borne. Variables serveur : `GEMINI_API_KEY`, `OPENAI_API_KEY`, `FAL_KEY`, `ELEVENLABS_API_KEY` (jamais exposées au navigateur).
+
+Vue 3D éclatée (`show_3d`) : conteneur, convoi exceptionnel, portique de quai, porte-conteneurs, wagon, ou assemblage décrit par Lara ; pièces numérotées, explication au toucher, visite guidée lue à voix haute.
 
 ## Son et interactions
 
