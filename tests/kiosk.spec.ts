@@ -178,7 +178,7 @@ test("an exploded 3D view lists numbered parts with explanations",async({page})=
   await page.route("**/api/tts",r=>r.fulfill({status:503,body:"{}"}));
   await page.goto("/accueil");await page.getByRole("button",{name:"Ouvrir Lara"}).click();await page.getByLabel("Question à Lara").fill("Décompose un conteneur");await page.getByRole("button",{name:"Envoyer la question"}).click();
   const view=page.getByRole("dialog",{name:"Conteneur 20 pieds"});await expect(view.locator(".x3d-list li")).toHaveCount(7,{timeout:20000});
-  await view.locator(".x3d-list button").filter({hasText:"Portes et scellés"}).click();await expect(view.locator(".x3d-card")).toContainText("scellé");
+  await view.locator(".x3d-list button").filter({hasText:"Portes et scellés"}).click();await expect(view.locator(".x3d-callout")).toContainText("scellé");
   await expect(view.getByRole("button",{name:"Visite guidée"})).toBeVisible();
 });
 
@@ -189,4 +189,21 @@ test("generated audio plays with a live waveform",async({page})=>{
   await page.route("**/api/tts",r=>r.fulfill({status:503,body:"{}"}));
   await page.goto("/accueil");await page.getByRole("button",{name:"Ouvrir Lara"}).click();await page.getByLabel("Question à Lara").fill("Ambiance de port");await page.getByRole("button",{name:"Envoyer la question"}).click();
   const view=page.getByRole("dialog",{name:"Ambiance portuaire"});await expect(view.locator("audio")).toBeVisible();await expect(view.locator(".audio-wave")).toBeVisible();await expect(view.getByRole("button",{name:"Télécharger l’audio"})).toBeEnabled();
+});
+
+test("projects page shows sourced AGL projects with a 3D exploded experience",async({page})=>{
+  await page.goto("/projets");await expect(page.getByRole("heading",{name:"PROJETS AGL · CÔTE D’IVOIRE"})).toBeVisible();
+  await expect(page.getByRole("heading",{name:"Cinq locomotives pour le métro d’Abidjan"})).toBeVisible();await expect(page.getByText("332,28 t",{exact:true})).toBeVisible();
+  await expect(page.locator(".proj-detail .x3d-list li")).toHaveCount(8,{timeout:20000});
+  await page.getByRole("button",{name:"Énergie",exact:true}).click();await page.getByRole("button",{name:/Projet Baleine/}).click();
+  await expect(page.getByRole("heading",{name:/Projet Baleine/})).toBeVisible();await expect(page.locator(".proj-detail .x3d-list")).toContainText("Touret de câble sous-marin");
+  await page.getByRole("button",{name:/AGL — 200\+ tonnes/}).click();await expect(page.getByRole("img",{name:"QR code de la source"})).toBeVisible();
+});
+
+test("Lara can open a specific project",async({page})=>{
+  const pr={type:"project",id:"sitarail-gl30"};
+  await page.route("**/api/gemini/stream",r=>r.fulfill({contentType:"text/event-stream",body:`data: ${JSON.stringify({action:pr})}\n\ndata: ${JSON.stringify({done:true,reply:"Voici le projet.",provider:"x",model:"x",actions:[pr]})}\n\n`}));
+  await page.route("**/api/tts",r=>r.fulfill({status:503,body:"{}"}));
+  await page.goto("/accueil");await page.getByRole("button",{name:"Ouvrir Lara"}).click();await page.getByLabel("Question à Lara").fill("Montre le projet Sitarail");await page.getByRole("button",{name:"Envoyer la question"}).click();
+  await expect(page).toHaveURL(/projets$/);await expect(page.getByRole("heading",{name:"Sitarail : quatre locomotives GL30"})).toBeVisible();
 });

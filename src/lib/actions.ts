@@ -12,8 +12,8 @@ export interface WebView { kind: "search" | "news"; query: string; summary?: str
 export const WEB_TOOLS = ["web_search", "get_news", "open_page"];
 export interface PageData { url: string; title: string; site: string; description?: string; image?: string; paragraphs: string[]; embeddable: boolean }
 export type AudioKind = "voiceover" | "sound" | "music";
-export type Model3DKind = "container" | "truck" | "crane" | "ship" | "wagon" | "custom";
-export const MODEL_3D: Model3DKind[] = ["container", "truck", "crane", "ship", "wagon", "custom"];
+export type Model3DKind = "container" | "truck" | "crane" | "ship" | "wagon" | "locomotive" | "locomotive_convoy" | "xmas_tree" | "tank_convoy" | "terminal" | "mri" | "haul_truck" | "custom";
+export const MODEL_3D: Model3DKind[] = ["container", "truck", "crane", "ship", "wagon", "locomotive", "locomotive_convoy", "xmas_tree", "tank_convoy", "terminal", "mri", "haul_truck", "custom"];
 export type PartShape = "box" | "cylinder" | "sphere" | "cone";
 export interface Part3D { name: string; explanation: string; shape?: PartShape; size?: [number, number, number]; position?: [number, number, number]; color?: string }
 export type FlowKind = "mine" | "plant" | "truck" | "rail" | "port" | "ship" | "plane" | "warehouse" | "customs" | "hub" | "market";
@@ -43,10 +43,11 @@ export type MaterialAction =
   | { type: "flow"; flow: Flow }
   | { type: "web"; title: string; web: WebView }
   | { type: "page"; page: PageData }
+  | { type: "project"; id: string }
   | { type: "render_audio"; title: string; kind: AudioKind; text: string; seconds?: number }
   | { type: "model3d"; title: string; object: Model3DKind; parts: Part3D[]; intro?: string }
   | { type: "go"; screen: Screen };
-export const ALLOWED_SCREENS = ["home", "games", "mission", "explore", "build", "vision", "mining", "corporate", "appointment", "careers", "quotation", "satisfaction", "market", "canvas"];
+export const ALLOWED_SCREENS = ["home", "games", "mission", "explore", "build", "vision", "mining", "corporate", "appointment", "careers", "quotation", "satisfaction", "market", "canvas", "projects"];
 export const ROUTES: RouteId[] = ["route-A", "route-B", "route-C"];
 export const MINING_STAGES: MiningStage[] = ["exploration", "construction", "production", "export", "closure"];
 export const STEP_MODES: StepMode[] = ["road", "rail", "sea", "air", "port", "warehouse", "customs", "heavy_lift", "mining", "digital", "people"];
@@ -72,6 +73,7 @@ export function parseToolAction(name?:string, args:Record<string,unknown>={ }):M
     const parts=list(args.parts,14).map(p=>({name:str(p.name,40),explanation:str(p.explanation,300),shape:shapes.includes(String(p.shape))?p.shape as PartShape:undefined,size:vec(p.size,0.05,12),position:vec(p.position,-12,12),color:/^#[0-9a-f]{6}$/i.test(String(p.color))?String(p.color):undefined})).filter(p=>p.name);
     if(args.object==="custom"&&parts.length<2)return null;
     return {type:"model3d",title:str(args.title,150)||"Vue éclatée",object:args.object as Model3DKind,parts,intro:str(args.intro,400)||undefined};}
+  if(name==="show_project"&&typeof args.id==="string"&&/^[a-z0-9-]{2,40}$/.test(args.id))return {type:"project",id:args.id};
   if(name==="show_flow"){
     const title=str(args.title,150);
     const nodes=list(args.nodes,8).map(n=>({label:str(n.label,40),kind:(FLOW_KINDS.includes(n.kind as FlowKind)?n.kind:"hub") as FlowKind,detail:str(n.detail,120)||undefined})).filter(n=>n.label);
@@ -93,6 +95,7 @@ export function describeAction(a: MaterialAction): string {
   switch (a.type) {
     case "solution": return `Vue solution « ${a.solution.title} » affichée : ${a.solution.steps.length} étapes${a.solution.route ? `, carte ${a.solution.route}` : ""}${a.solution.imagePrompt ? ", visuel en cours de création" : ""}.`;
     case "render_video": return "Film en cours de tournage, il s’affiche dans la vue dans une vingtaine de secondes avec le logo Africa Global Logistics.";
+    case "project": return `Page Projets ouverte sur « ${a.id} » : chiffres clés, étapes, expérience 3D éclatée et sources.`;
     case "page": return `Page « ${a.page.title} » (${a.page.site}) ouverte en mode lecture${a.page.embeddable ? ", page d’origine disponible" : ""}.`;
     case "render_audio": return a.kind === "music" ? "Musique en cours de composition, elle se lit dans la vue." : a.kind === "sound" ? "Ambiance sonore en cours de création, elle se lit dans la vue." : "Voix off en cours d’enregistrement, elle se lit dans la vue.";
     case "model3d": return `Vue 3D éclatée « ${a.title} » affichée : ${a.object}, pièces numérotées avec leurs explications, visite guidée disponible.`;

@@ -7,8 +7,8 @@ import { isMuted, setMuted } from "./sound";
 
 export { AGL_SYSTEM_PROMPT };
 
-export type Screen = "attract" | "home" | "games" | "mission" | "explore" | "build" | "vision" | "mining" | "corporate" | "appointment" | "careers" | "quotation" | "satisfaction" | "market" | "canvas" | "finale";
-export const SCREEN_PATHS: Record<Screen, string> = { attract: "/", home: "/accueil", games: "/experiences", mission: "/mission", explore: "/explore", build: "/build", vision: "/vision", mining: "/mining", corporate: "/presentation", appointment: "/rendez-vous", careers: "/emploi", quotation: "/cotation", satisfaction: "/satisfaction", market: "/performance", canvas: "/canvas", finale: "/resultats" };
+export type Screen = "attract" | "home" | "games" | "mission" | "explore" | "build" | "vision" | "mining" | "corporate" | "appointment" | "careers" | "quotation" | "satisfaction" | "market" | "canvas" | "projects" | "finale";
+export const SCREEN_PATHS: Record<Screen, string> = { attract: "/", home: "/accueil", games: "/experiences", mission: "/mission", explore: "/explore", build: "/build", vision: "/vision", mining: "/mining", corporate: "/presentation", appointment: "/rendez-vous", careers: "/emploi", quotation: "/cotation", satisfaction: "/satisfaction", market: "/performance", canvas: "/canvas", projects: "/projets", finale: "/resultats" };
 
 export interface ExperienceContext {
   experience: string;
@@ -116,7 +116,7 @@ export function KioskProvider({ children, initialScreen = "attract" }: { childre
   // Auto-reset 60s -> confirm -> attract
   useEffect(() => {
     const id = setInterval(() => {
-      const longSession = ["satisfaction", "quotation", "appointment", "careers", "vision", "canvas"].includes(screenRef.current);
+      const longSession = ["satisfaction", "quotation", "appointment", "careers", "vision", "canvas", "projects"].includes(screenRef.current);
       if (screenRef.current !== "attract" && Date.now() - lastTouch > (longSession ? 300000 : 90000)) {
         setScreen("attract");
         setCargo(null); setScenario(null); setRoute(null); setIncident(null);

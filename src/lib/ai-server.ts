@@ -3,8 +3,9 @@ import path from "path";
 import { GoogleGenAI, Modality, type Content, type Part } from "@google/genai";
 import { AGL_SYSTEM_PROMPT, VISION_VOICE_PROMPT } from "./prompt";
 import { KNOWLEDGE_FACTS } from "./content";
+import { PROJECTS } from "./projects";
 import { AGL_TOOLS, OPENAI_TOOLS } from "./ai-tools";
-import { parseToolAction, WEB_TOOLS, type MaterialAction } from "./actions";
+import { describeAction, parseToolAction, WEB_TOOLS, type MaterialAction } from "./actions";
 import { newsFeed, webSearch } from "./web";
 import { readPage } from "./page";
 
@@ -17,7 +18,9 @@ export const OPENAI_REALTIME_MODEL=process.env.OPENAI_REALTIME_MODEL||"gpt-realt
 export const GEMINI_IMAGE_MODEL=process.env.GEMINI_IMAGE_MODEL||"gemini-2.5-flash-image";
 export function resolveKey(){const key=(process.env.GEMINI_API_KEY||"").trim();return {key,provider:key?"gemini":"none"};}
 let knowledgeCache:string|null=null;
-export async function getKnowledge(){if(knowledgeCache!==null)return knowledgeCache;let docs="";try{const dir=path.join(process.cwd(),"knowledge");for(const f of (await fs.readdir(dir)).filter(f=>f.endsWith(".md")).slice(0,12))docs+=`\n--- ${f} ---\n${(await fs.readFile(path.join(dir,f),"utf8")).slice(0,6000)}`;}catch{}knowledgeCache=KNOWLEDGE_FACTS+docs.slice(0,16000);return knowledgeCache;}
+// Réalisations sourcées (même source que la page Projets) : Lara les cite avec leur date et leur source.
+function projectsKnowledge(){return "\n\nRÉALISATIONS D’AFRICA GLOBAL LOGISTICS EN CÔTE D’IVOIRE (sources publiques, citer la date) :\n"+PROJECTS.map(p=>`- [${p.id}] ${p.title} (${p.date}, ${p.place}) : ${p.summary} Chiffres : ${p.facts.map(f=>`${f.value} ${f.label}`).join(", ")}. Source : ${p.sources[0]?.label}.${p.model?` Vue 3D : ${p.model}.`:""}`).join("\n");}
+export async function getKnowledge(){if(knowledgeCache!==null)return knowledgeCache;let docs="";try{const dir=path.join(process.cwd(),"knowledge");for(const f of (await fs.readdir(dir)).filter(f=>f.endsWith(".md")).slice(0,12))docs+=`\n--- ${f} ---\n${(await fs.readFile(path.join(dir,f),"utf8")).slice(0,6000)}`;}catch{}knowledgeCache=KNOWLEDGE_FACTS+projectsKnowledge()+docs.slice(0,16000);return knowledgeCache;}
 
 // Outil web exécuté côté serveur : la vue des sources s’affiche, le résultat compact revient au modèle.
 async function runWebTool(name:string,args:Record<string,unknown>|undefined,lang:string|undefined,onAction?:(a:MaterialAction)=>void){
@@ -36,6 +39,15 @@ async function runWebTool(name:string,args:Record<string,unknown>|undefined,lang
   return {ok:true,summary:result.summary,results:result.items.map(i=>({title:i.title,source:i.source,date:i.date}))};
 }
 const MAX_TOOL_ROUNDS=3;
+// Outil d’affichage : la vue est publiée et son résumé revient au modèle, qui peut ensuite la commenter.
+// Un seul projet est ouvert par réponse (le plus pertinent).
+function runViewTool(name:string,args:Record<string,unknown>|undefined,actions:MaterialAction[],onAction?:(a:MaterialAction)=>void){
+  const action=parseToolAction(name,args??{});
+  if(!action)return {ok:false,error:"Arguments invalides : rien n’a été affiché."};
+  if(action.type==="project"&&actions.some(a=>a.type==="project"))return {ok:false,error:"Un seul projet s’affiche à la fois : cite les autres dans ta réponse."};
+  actions.push(action);onAction?.(action);
+  return {ok:true,displayed:describeAction(action)};
+}
 export interface ChatTurn {role:"user"|"ai";text:string}
 export interface ReplyOptions {message:string;context?:unknown;image?:string;lang?:string;modelOverride?:string;voice?:boolean;history?:ChatTurn[];deepThink?:boolean}
 export interface ReplyResult {reply:string;provider:string;model:string;actions:MaterialAction[];degraded?:boolean}
@@ -61,12 +73,13 @@ export async function getReply(opts:ReplyOptions,onToken?:(text:string)=>void,on
       let contents:Content[]=[...history,{role:"user",parts}];
       for(let round=0;round<MAX_TOOL_ROUNDS;round++){
         const stream=await ai.models.generateContentStream({model,contents,config});
-        const webCalls:{name:string;args?:Record<string,unknown>}[]=[];
-        for await(const chunk of stream){const text=chunk.candidates?.[0]?.content?.parts?.filter(p=>p.text&&!p.thought).map(p=>p.text).join("")??"";if(text){reply+=text;onToken?.(text);emitted=true;}for(const call of chunk.functionCalls??[]){if(call.name&&WEB_TOOLS.includes(call.name)){webCalls.push({name:call.name,args:call.args});continue;}const action=parseToolAction(call.name,call.args);if(action){actions.push(action);onAction?.(action);}}}
-        if(!webCalls.length)break;
-        // Recherche faite : le modèle reprend avec les résultats pour répondre.
-        const results=await Promise.all(webCalls.map(c=>runWebTool(c.name,c.args,opts.lang,a=>{actions.push(a);onAction?.(a);})));
-        contents=[...contents,{role:"model",parts:webCalls.map(c=>({functionCall:{name:c.name,args:c.args}}))},{role:"user",parts:webCalls.map((c,i)=>({functionResponse:{name:c.name,response:results[i]}}))}];
+        const calls:{name:string;args?:Record<string,unknown>}[]=[];let roundText="";
+        for await(const chunk of stream){const text=chunk.candidates?.[0]?.content?.parts?.filter(p=>p.text&&!p.thought).map(p=>p.text).join("")??"";if(text){reply+=text;roundText+=text;onToken?.(text);emitted=true;}for(const call of chunk.functionCalls??[])if(call.name)calls.push({name:call.name,args:call.args});}
+        if(!calls.length)break;
+        // Outils exécutés ; le modèle reprend avec leurs résultats (recherche) ou commente la vue affichée.
+        const results=await Promise.all(calls.map(c=>WEB_TOOLS.includes(c.name)?runWebTool(c.name,c.args,opts.lang,a=>{actions.push(a);onAction?.(a);}):Promise.resolve(runViewTool(c.name,c.args,actions,onAction))));
+        if(roundText.trim()&&!calls.some(c=>WEB_TOOLS.includes(c.name)))break;
+        contents=[...contents,{role:"model",parts:calls.map(c=>({functionCall:{name:c.name,args:c.args}}))},{role:"user",parts:calls.map((c,i)=>({functionResponse:{name:c.name,response:results[i] as Record<string,unknown>}}))}];
       }
       if(!reply&&actions.length){reply=opts.lang==="en"?"I’m opening the requested view for you.":"J’ouvre la vue demandée pour vous.";onToken?.(reply);}
       if(reply)return {reply,provider:"gemini",model,actions};
@@ -92,7 +105,7 @@ async function openaiReply(opts:ReplyOptions,system:string,onToken?:(text:string
     for(let round=0;round<MAX_TOOL_ROUNDS;round++){
     const r=await fetch("https://api.openai.com/v1/chat/completions",{method:"POST",headers:{Authorization:`Bearer ${k}`,"Content-Type":"application/json"},body:JSON.stringify({model:OPENAI_TEXT_MODEL,messages:convo,tools:OPENAI_TOOLS,stream:true,max_completion_tokens:opts.deepThink?4000:1800,...(opts.deepThink?{reasoning_effort:"medium"}:{})}),signal:AbortSignal.timeout(30000)});
     if(!r.ok||!r.body){const j=await r.json().catch(()=>({}));const msg=j?.error?.message??"";if(isQuota(r.status,msg))cooldown.set("openai-text",Date.now()+COOLDOWN_MS);console.warn("Lara backup unavailable",r.status,msg.slice(0,200));if(reply||actions.length)break;return null;}
-    const reader=r.body.getReader();const dec=new TextDecoder();let buf="";
+    const reader=r.body.getReader();const dec=new TextDecoder();let buf="";const replyBefore=reply.length;
     const calls:Record<number,{id:string;name:string;args:string}>={};
     for(;;){
       const {done,value}=await reader.read();if(done)break;
@@ -105,11 +118,11 @@ async function openaiReply(opts:ReplyOptions,system:string,onToken?:(text:string
         }catch{/* fragment incomplet */}
       }
     }
-    const webCalls:{id:string;name:string;args:Record<string,unknown>}[]=[];
-    for(const c of Object.values(calls)){try{const args=JSON.parse(c.args||"{}");if(WEB_TOOLS.includes(c.name)){webCalls.push({id:c.id,name:c.name,args});continue;}const action=parseToolAction(c.name,args);if(action){actions.push(action);onAction?.(action);}}catch{/* arguments invalides */}}
-    if(!webCalls.length)break;
-    const results=await Promise.all(webCalls.map(c=>runWebTool(c.name,c.args,opts.lang,a=>{actions.push(a);onAction?.(a);})));
-    convo.push({role:"assistant",content:null,tool_calls:webCalls.map(c=>({id:c.id,type:"function",function:{name:c.name,arguments:JSON.stringify(c.args)}}))},...webCalls.map((c,i)=>({role:"tool",tool_call_id:c.id,content:JSON.stringify(results[i])})));
+    const roundCalls=Object.values(calls).map(c=>{let args:Record<string,unknown>={};try{args=JSON.parse(c.args||"{}");}catch{/* arguments invalides */}return {id:c.id,name:c.name,args};});
+    if(!roundCalls.length)break;
+    const results=await Promise.all(roundCalls.map(c=>WEB_TOOLS.includes(c.name)?runWebTool(c.name,c.args,opts.lang,a=>{actions.push(a);onAction?.(a);}):Promise.resolve(runViewTool(c.name,c.args,actions,onAction))));
+    if(reply.length>replyBefore&&!roundCalls.some(c=>WEB_TOOLS.includes(c.name)))break;
+    convo.push({role:"assistant",content:null,tool_calls:roundCalls.map(c=>({id:c.id,type:"function",function:{name:c.name,arguments:JSON.stringify(c.args)}}))},...roundCalls.map((c,i)=>({role:"tool",tool_call_id:c.id,content:JSON.stringify(results[i])})));
     }
     if(!reply&&actions.length){reply=opts.lang==="en"?"I’m opening the requested view for you.":"J’ouvre la vue demandée pour vous.";onToken?.(reply);}
     return reply?{reply,provider:"openai",model:OPENAI_TEXT_MODEL,actions}:null;

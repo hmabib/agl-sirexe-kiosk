@@ -1,5 +1,5 @@
 "use client";
-import { ArrowUpRight, CalendarDays, FileText, GraduationCap, Gamepad2, Building2, MessageSquareHeart, Pickaxe, ChartNoAxesCombined } from "lucide-react";
+import { ArrowUpRight, Boxes, CalendarDays, FileText, GraduationCap, Gamepad2, Building2, MessageSquareHeart, Pickaxe, ChartNoAxesCombined } from "lucide-react";
 import { useKiosk, type Screen } from "@/lib/store";
 import { TopBar } from "./Chrome";
 import { ContinentMap } from "./ContinentMap";
@@ -12,7 +12,8 @@ export function HomeScreen() {
     { screen:"quotation",title:en?"Request a quotation":"Demander une cotation",desc:en?"The official Africa Global Logistics quotation form":"Le formulaire officiel Africa Global Logistics",icon:FileText,tag:"03 · YOUR PROJECT" },
     { screen:"careers",title:en?"Join the adventure":"Rejoindre l’aventure",desc:en?"Create your candidate profile":"Préparer votre candidature",icon:GraduationCap,tag:"04 · TALENTS" },
     { screen:"corporate",title:en?"Discover Africa Global Logistics":"Découvrir Africa Global Logistics",desc:en?"One network, integrated expertise":"Un réseau, des expertises intégrées",icon:Building2,tag:"05 · AFRICA GLOBAL LOGISTICS" },
-    { screen:"satisfaction",title:en?"Share your feedback":"Votre avis compte",desc:en?"Official satisfaction survey":"Enquête de satisfaction officielle",icon:MessageSquareHeart,tag:"06 · YOUR VOICE" },
+    { screen:"projects",title:en?"Our projects in Côte d’Ivoire":"Nos projets en Côte d’Ivoire",desc:en?"Exceptional convoys, ports and rail in 3D":"Convois exceptionnels, ports et rail en 3D",icon:Boxes,tag:"06 · RÉALISATIONS" },
+    { screen:"satisfaction",title:en?"Share your feedback":"Votre avis compte",desc:en?"Official satisfaction survey":"Enquête de satisfaction officielle",icon:MessageSquareHeart,tag:"07 · YOUR VOICE" },
   ];
   return <div className="experience-page home-page">
     <TopBar title="Africa Global Logistics × SIREXE" subtitle={en?"At the heart of Africa’s transformation":"Au cœur des transformations de l’Afrique"}/>

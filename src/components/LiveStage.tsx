@@ -42,6 +42,7 @@ export function LiveStage(){
     const handle=(e:Event)=>{
       const a=(e as CustomEvent<MaterialAction>).detail;
       if(a.type==="go"){go(a.screen);return;}
+      if(a.type==="project"){try{sessionStorage.setItem("agl-project",a.id);}catch{/* stockage indisponible */}go("projects");window.dispatchEvent(new CustomEvent("agl-project",{detail:a.id}));return;}
       if(a.type==="show_mining"){sessionStorage.setItem("agl-mining-stage",a.stage);go("mining");window.dispatchEvent(new CustomEvent("agl-mining-stage",{detail:a.stage}));return;}
       if(!isStage(a))return;
       if(a.type==="show_route")setRoute(a.route);
