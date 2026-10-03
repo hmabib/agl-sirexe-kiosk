@@ -72,6 +72,21 @@ Chaque instruction donnée à Lara (voix Gemini Live ou texte) se matérialise d
 
 En Live, chaque appel d’outil reçoit une réponse décrivant ce qui est réellement affiché, et le modèle lit l’écran à la demande (`get_screen_context`) au lieu de recevoir le contexte toutes les 2,5 s. Les sessions utilisent la compression de contexte et la reprise (`sessionResumption`) : à l’annonce de fin de session ou après une coupure, la conversation se reconnecte sans être perdue (3 tentatives). En mode texte, les vues apparaissent dès l’appel d’outil, sans attendre la fin du texte ni la génération d’image.
 
+## Orchestration, internet et secours
+
+Lara choisit l’outil selon la demande et peut en combiner plusieurs : vue solution, carte, image, film court, storyboard, graphique analytique, schéma logistique animé (`show_flow`), recherche web sourcée (`web_search`) et fil d’actualités (`get_news`, Google News RSS). Les recherches sont exécutées côté serveur, leurs sources datées s’affichent avec un QR code pour lire l’article sur téléphone, et le modèle répond à partir des résultats en citant source et date.
+
+| Besoin | Principal | Secours automatique |
+|---|---|---|
+| Texte | Gemini | OpenAI (`OPENAI_TEXT_MODEL`, défaut `gpt-5.4-mini`) |
+| Voix temps réel | Gemini Live | OpenAI Realtime en WebRTC (`OPENAI_REALTIME_MODEL`, défaut `gpt-realtime-2.1-mini`, voix féminine) |
+| Voix lue | Gemini TTS | OpenAI `gpt-4o-mini-tts` |
+| Images | OpenAI (`OPENAI_IMAGE_MODEL`) → Gemini (modèles découverts) | fal (`FAL_IMAGE_MODEL`) |
+| Films | fal MiniMax H3 (`FAL_VIDEO_MODEL`) | — |
+| Recherche web | OpenAI (recherche intégrée) | Google News RSS |
+
+Un fournisseur sans quota ou sans crédit est mis de côté 10 minutes. Aucun nom de modèle n’est affiché sur la borne. Variables serveur : `GEMINI_API_KEY`, `OPENAI_API_KEY`, `FAL_KEY` (jamais exposées au navigateur).
+
 ## Son et interactions
 
 `src/lib/sound.ts` synthétise le design sonore en WebAudio, sans fichier audio : toucher, onglet, validation, fermeture, ouverture de Lara, transition d’écran, apparition d’une vue, connexion Live. Tous les boutons de la borne en bénéficient automatiquement (attribut `data-sfx` pour forcer un son, `data-sfx="off"` pour le couper), avec une micro-vibration si l’écran la gère. Le bouton Son coupe l’ensemble et l’état est conservé.

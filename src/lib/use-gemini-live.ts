@@ -96,13 +96,17 @@ export function useLiveVoice(opts:LiveOptions){
   },[receive]);
 
   // Secours temps réel : WebRTC, même micro, mêmes outils et consignes.
-  const startBackup=useCallback(async(attempt:number,stream:MediaStream)=>{
+  const backupToken=useCallback(async()=>{
     const r=await fetch("/api/live/token",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({provider:"openai",lang:options.current.lang,context:options.current.getContext()})});
     let j:{token?:string;message?:string}={};try{j=await r.json();}catch{}
     if(!r.ok||!j.token)throw new Error(j.message||FALLBACK_ERROR[lang()]);
+    return j.token;
+  },[]);
+  const startBackup=useCallback(async(attempt:number,stream:MediaStream,ready?:string)=>{
+    const token=ready??await backupToken();
     if(!alive.current||generation.current!==attempt)return;
     user.current="";reply.current="";
-    const session=await connectOpenAIRealtime(j.token,stream,GREETING,{
+    const session=await connectOpenAIRealtime(token,stream,GREETING,{
       onUserSpeech:()=>{user.current="";reply.current="";setPhase("listening");},
       onUserDelta:d=>{user.current+=d;options.current.onUser?.(user.current);options.current.onActivity?.();setPhase("thinking");},
       onReplyDelta:d=>{reply.current+=d;options.current.onReply?.(reply.current,false);},
@@ -116,7 +120,7 @@ export function useLiveVoice(opts:LiveOptions){
     // Niveau micro pour l’orbe (le flux audio part directement en WebRTC).
     const ac=input.current;if(ac){const an=ac.createAnalyser();an.fftSize=512;ac.createMediaStreamSource(stream).connect(an);const buf=new Uint8Array(an.fftSize);timers.current.push(setInterval(()=>{an.getByteTimeDomainData(buf);let p=0;for(const v of buf)p+=(v-128)**2;setLevel(Math.min(1,Math.sqrt(p/buf.length)/40));},200));}
     setModel("");setPhase("listening");
-  },[runTool,fail]);
+  },[runTool,fail,backupToken]);
   const switchToBackup=useCallback(async(attempt:number)=>{
     const stream=mic.current;if(!stream)return false;
     preferBackup();connection.current++;const old=session.current;session.current=null;try{old?.close();}catch{}
@@ -144,11 +148,15 @@ export function useLiveVoice(opts:LiveOptions){
       input.current=new AudioContext();output.current=new AudioContext({sampleRate:24000});await Promise.all([input.current.resume(),output.current.resume()]);if(!alive.current||generation.current!==attempt)return false;
       // Micro et jeton en parallèle : la connexion démarre plus vite.
       // Voix principale, sauf si elle vient d’échouer ; sinon secours temps réel avec le même micro.
+      // Le jeton de secours est demandé dès l’échec de la voix principale, pendant l’ouverture du micro :
+      // bascule plus rapide, et erreur affichée tout de suite si le secours manque aussi.
       let primaryFailed=backupFirst();
-      const [stream,connected]=await Promise.all([navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true},video:false}),primaryFailed?Promise.resolve(null):connect(attempt).catch(e=>{console.warn("Voix principale indisponible",e instanceof Error?e.message:e);primaryFailed=true;return null;})]);
+      const primary=primaryFailed?Promise.resolve(null):connect(attempt).catch(e=>{console.warn("Voix principale indisponible",e instanceof Error?e.message:e);primaryFailed=true;return null;});
+      const backup=primary.then(c=>c||!primaryFailed?undefined:backupToken());
+      const [stream,connected,token]=await Promise.all([navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true},video:false}),primary,backup]);
       if(!alive.current||generation.current!==attempt){stream.getTracks().forEach(t=>t.stop());connected?.close();return false;}
       mic.current=stream;
-      if(!connected){if(!primaryFailed)return false;if(!backupFirst())preferBackup();await startBackup(attempt,stream);return true;}
+      if(!connected){if(!primaryFailed)return false;if(!backupFirst())preferBackup();await startBackup(attempt,stream,token);return true;}
       session.current=connected;
       const ac=input.current;if(!ac)return fail(attempt,FALLBACK_ERROR[lang()]);await ac.audioWorklet.addModule("/audio/pcm-worklet.js");if(!alive.current||generation.current!==attempt)return false;const node=new AudioWorkletNode(ac,"agl-pcm-input");worklet.current=node;
       node.port.onmessage=(e:MessageEvent<ArrayBuffer>)=>{if(!session.current||!alive.current)return;let power=0;const pcm=new Int16Array(e.data);for(const v of pcm)power+=v*v;levelRef.current=Math.min(1,Math.sqrt(power/pcm.length)/10000);try{session.current.sendRealtimeInput({audio:{data:toBase64(e.data),mimeType:"audio/pcm;rate=16000"}});}catch{}};
@@ -161,7 +169,7 @@ export function useLiveVoice(opts:LiveOptions){
       if(e instanceof DOMException)return fail(attempt,e.name==="NotAllowedError"?(lang()==="en"?"Microphone access was refused. Allow it or use text.":"L’accès au micro a été refusé. Autorisez-le ou utilisez le texte."):FALLBACK_ERROR[lang()]);
       return fail(attempt,e instanceof Error&&e.message?e.message:FALLBACK_ERROR[lang()]);
     }
-  },[connect,fail,stop,startBackup]);
+  },[connect,fail,stop,startBackup,backupToken]);
   useEffect(()=>()=>stop(),[stop]);
   return {phase,error,model,level,start,stop,interrupt,active:phase!=="idle"};
 }
