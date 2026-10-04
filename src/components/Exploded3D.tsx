@@ -1,148 +1,24 @@
 "use client";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Canvas, useFrame } from "@react-three/fiber";
-import { CameraControls, ContactShadows, Environment, Html, Lightformer } from "@react-three/drei";
-import type { Group, MeshPhysicalMaterial } from "three";
-import { Layers, Play, Square, Boxes, Tags, Focus } from "lucide-react";
-import type { Model3DKind, Part3D, PartShape } from "@/lib/actions";
+import { Canvas, useFrame, useThree } from "@react-three/fiber";
+import { CameraControls, Environment, Html, Lightformer } from "@react-three/drei";
+import { ACESFilmicToneMapping, Box3, Group, PCFShadowMap, Vector3 } from "three";
+import { Layers, Play, Square, Boxes, Tags, Focus, RotateCcw, Rotate3D, Move } from "lucide-react";
+import type { Model3DKind, Part3D } from "@/lib/actions";
 import { playServerVoice, stopServerVoice } from "@/lib/live";
 import { sfx } from "@/lib/sound";
 
-type V3 = [number, number, number];
-type Finish = "paint" | "metal" | "rubber" | "glass";
-interface Mesh { shape: PartShape; size: V3; pos: V3; rot?: V3; color?: string; finish?: Finish }
-interface PartDef { name: string; explanation: string; color: string; finish?: Finish; explode: V3; meshes: Mesh[] }
-
-// ——— Constructeurs de géométrie ———
-const box = (size: V3, pos: V3, color?: string, finish?: Finish): Mesh => ({ shape: "box", size, pos, color, finish });
-const cyl = (r: number, h: number, pos: V3, rot?: V3, color?: string, finish?: Finish): Mesh => ({ shape: "cylinder", size: [r, h, r], pos, rot, color, finish });
-const wheel = (pos: V3, r = 0.5, w = 0.4): Mesh => cyl(r, w, pos, [Math.PI / 2, 0, 0], "#22272f", "rubber");
-const wheelRow = (xs: number[], z: number, r = 0.5, w = 0.4, y?: number) => xs.flatMap(x => [wheel([x, y ?? r, -z], r, w), wheel([x, y ?? r, z], r, w)]);
-const STACK = ["#b23a2a", "#1f5fa8", "#d9a400", "#2e7d5b", "#e8e8e8", "#7a3fa0"];
-const NAVY = "#2a5196", GOLD = "#EED58E";
-const range = (n: number, f: (i: number) => number) => Array.from({ length: n }, (_, i) => f(i));
-const strap = (x: number, z: number, tilt: number): Mesh => ({ shape: "box", size: [0.08, 2.1, 0.08], pos: [x, 2.1, z], rot: [tilt, 0, 0] });
-
-// Tracteur routier 6×6 (cabine, capot, châssis, roues), orienté vers +x.
-const tractor = (x: number): Mesh[] => [box([2.4, 2.7, 2.5], [x + 1.4, 2.25, 0], "#f2f2f2", "paint"), box([1.4, 0.5, 2.3], [x + 2.8, 1.1, 0], "#e8e8e8", "paint"), box([4.6, 0.4, 1.1], [x, 0.95, 0], "#4a5260", "metal"), ...wheelRow([x + 2, x - 0.4, x - 1.6], 1.1)];
-// Remorque hydraulique modulaire : plateau + lignes d’essieux pendulaires.
-const modular = (x0: number, lines: number, width = 3): Mesh[] => [box([lines * 1.5 + 0.6, 0.45, width], [x0 + lines * 0.75, 1.05, 0], "#4b5566", "metal")];
-const modularWheels = (x0: number, lines: number, width = 3): Mesh[] => range(lines, i => x0 + 0.75 + i * 1.5).flatMap(x => [-width / 2 + 0.35, -width / 2 + 0.75, width / 2 - 0.75, width / 2 - 0.35].map(z => wheel([x, 0.42, z], 0.42, 0.3)));
-
-// ——— Objets modélisés pièce par pièce ; « explode » = direction de décomposition ———
-const PRESETS: Record<Exclude<Model3DKind, "custom">, PartDef[]> = {
-  container: [
-    { name: "Plancher", explanation: "Plancher en bois dur posé sur des traverses en acier : il répartit la charge utile, jusqu’à environ 28 tonnes pour un 20 pieds.", color: "#6b4f2a", explode: [0, -1.4, 0], meshes: [box([6, 0.16, 2.4], [0, 0.08, 0])] },
-    { name: "Marchandise", explanation: "Marchandise palettisée et arrimée : un bon calage évite les déplacements de charge pendant le transport maritime.", color: GOLD, explode: [0, 0.6, 0], meshes: [-1.9, 0, 1.9].map(x => box([1.5, 1.3, 1.1], [x, 0.81, 0])) },
-    { name: "Parois latérales", explanation: "Parois en acier ondulé Corten : elles apportent la rigidité qui permet d’empiler les conteneurs sur plusieurs hauteurs.", color: "#b23a2a", finish: "paint", explode: [0, 0, 1.8], meshes: [box([6, 2.4, 0.06], [0, 1.36, -1.2]), box([6, 2.4, 0.06], [0, 1.36, 1.2])] },
-    { name: "Toit", explanation: "Toit en tôle d’acier étanche, protégeant la marchandise des intempéries et des embruns.", color: "#9c3022", finish: "paint", explode: [0, 1.8, 0], meshes: [box([6, 0.08, 2.46], [0, 2.6, 0])] },
-    { name: "Face avant", explanation: "Face avant fermée et renforcée, côté opposé aux portes.", color: "#a8352a", finish: "paint", explode: [-1.8, 0, 0], meshes: [box([0.06, 2.4, 2.4], [-3, 1.36, 0])] },
-    { name: "Portes et scellés", explanation: "Portes arrière à barres de verrouillage : le scellé posé après empotage garantit l’intégrité du chargement jusqu’au dédouanement.", color: "#c2442f", finish: "paint", explode: [2, 0, 0], meshes: [box([0.06, 2.4, 1.18], [3, 1.36, -0.6]), box([0.06, 2.4, 1.18], [3, 1.36, 0.6])] },
-    { name: "Pièces de coin", explanation: "Pièces de coin normalisées ISO : les portiques, cavaliers et verrous tournants s’y accrochent pour lever et arrimer le conteneur.", color: GOLD, finish: "metal", explode: [0, -0.6, 0], meshes: [[-2.95, -1.15], [-2.95, 1.15], [2.95, -1.15], [2.95, 1.15]].flatMap(([x, z]) => [box([0.18, 0.14, 0.16], [x, 0.07, z]), box([0.18, 0.14, 0.16], [x, 2.66, z])]) },
-  ],
-  truck: [
-    { name: "Cabine du tracteur", explanation: "Cabine du tracteur routier : le chauffeur y suit l’itinéraire validé par l’étude de route et reste en contact avec l’escorte.", color: "#f2f2f2", finish: "paint", explode: [2.6, 1, 0], meshes: [box([2.2, 2.6, 2.5], [6.6, 2.1, 0])] },
-    { name: "Châssis tracteur", explanation: "Châssis du tracteur, dimensionné pour la puissance de traction nécessaire aux convois lourds.", color: "#4a5260", finish: "metal", explode: [1.6, -1.2, 0], meshes: [box([4.4, 0.35, 1], [5.4, 0.95, 0])] },
-    { name: "Sellette d’attelage", explanation: "Sellette d’attelage : le point de liaison entre le tracteur et la remorque, qui transmet une partie du poids.", color: GOLD, finish: "metal", explode: [0, 1.6, 0], meshes: [cyl(0.55, 0.16, [4.4, 1.2, 0])] },
-    { name: "Remorque surbaissée", explanation: "Remorque surbaissée : son plateau bas abaisse le centre de gravité et libère la hauteur sous les ponts et les lignes.", color: "#3b4250", finish: "metal", explode: [-1.2, -1.2, 0], meshes: [box([11, 0.35, 2.6], [-2.2, 0.95, 0]), box([1.6, 0.6, 2.4], [3.6, 1.25, 0])] },
-    { name: "Essieux et roues", explanation: "Essieux multiples : ils répartissent la charge pour respecter le poids autorisé par essieu et préserver la chaussée.", color: "#151a22", finish: "rubber", explode: [0, -1.8, 0], meshes: wheelRow([7.2, 5.2, 4.2, -4, -5.2, -6.4, -7.6], 1.1) },
-    { name: "Équipement minier", explanation: "La charge exceptionnelle : ici un équipement minier. Son gabarit et sa masse déterminent l’itinéraire, l’escorte et les autorisations.", color: "#d9a400", finish: "paint", explode: [0, 2.6, 0], meshes: [box([6, 2.6, 2.6], [-2.4, 2.45, 0]), cyl(0.9, 2.62, [-2.4, 3.9, 0], [Math.PI / 2, 0, 0], "#b88a00")] },
-  ],
-  crane: [
-    { name: "Jambes côté mer", explanation: "Jambes côté mer : elles roulent sur des rails le long du quai pour positionner le portique face à chaque baie du navire.", color: "#2f6db5", finish: "paint", explode: [2.5, 0, 0], meshes: [box([0.6, 14, 0.6], [4, 7, -5]), box([0.6, 14, 0.6], [4, 7, 5])] },
-    { name: "Jambes côté terre", explanation: "Jambes côté terre, sous lesquelles circulent les camions et cavaliers qui évacuent les conteneurs.", color: "#2f6db5", finish: "paint", explode: [-2.5, 0, 0], meshes: [box([0.6, 14, 0.6], [-6, 7, -5]), box([0.6, 14, 0.6], [-6, 7, 5])] },
-    { name: "Portique", explanation: "Poutres du portique : la structure qui relie les jambes et porte la flèche.", color: "#3a7cc8", finish: "paint", explode: [0, 1.8, 0], meshes: [box([10.6, 0.8, 0.8], [-1, 14.2, -5]), box([10.6, 0.8, 0.8], [-1, 14.2, 5]), box([0.8, 0.8, 10.8], [4, 14.2, 0]), box([0.8, 0.8, 10.8], [-6, 14.2, 0])] },
-    { name: "Flèche", explanation: "Flèche : elle s’avance au-dessus du navire pour atteindre les rangées de conteneurs les plus éloignées du quai.", color: "#4a8ad6", finish: "paint", explode: [3, 3, 0], meshes: [box([30, 1, 1.2], [9, 15.4, 0])] },
-    { name: "Chariot", explanation: "Chariot : il se déplace le long de la flèche et porte le système de levage.", color: GOLD, finish: "metal", explode: [0, 2.6, 2.4], meshes: [box([2, 1, 2], [14, 14.4, 0])] },
-    { name: "Cabine du grutier", explanation: "Cabine du grutier, suspendue sous le chariot pour une vue directe sur le conteneur pendant la manœuvre.", color: "#f2f2f2", finish: "glass", explode: [0, -2, -3.4], meshes: [box([1.8, 1.6, 1.8], [11.8, 13, 0])] },
-    { name: "Spreader", explanation: "Spreader (palonnier) : il se verrouille sur les quatre pièces de coin du conteneur grâce à des verrous tournants.", color: GOLD, finish: "metal", explode: [0, -1.4, 3.4], meshes: [box([6.2, 0.4, 2.5], [14, 10.6, 0]), cyl(0.04, 3.6, [14, 12.5, -0.8], undefined, "#cfd6e0"), cyl(0.04, 3.6, [14, 12.5, 0.8], undefined, "#cfd6e0")] },
-    { name: "Conteneur levé", explanation: "Le conteneur en cours de levée : un portique moderne enchaîne plusieurs dizaines de mouvements par heure.", color: "#b23a2a", finish: "paint", explode: [0, -3.2, 0], meshes: [box([6, 2.6, 2.4], [14, 9.1, 0])] },
-  ],
-  ship: [
-    { name: "Coque", explanation: "Coque du porte-conteneurs : ses ballasts règlent l’assiette et la stabilité selon le chargement.", color: NAVY, finish: "paint", explode: [0, -3.4, 0], meshes: [box([34, 5, 8], [-1, 2.5, 0]), { shape: "cone", size: [4, 6, 4], pos: [19, 2.5, 0], rot: [0, 0, -Math.PI / 2] }] },
-    { name: "Baies de conteneurs", explanation: "Baies de conteneurs : le plan de chargement place les plus lourds en bas et respecte l’ordre des escales de déchargement.", color: "#b23a2a", finish: "paint", explode: [0, 4.4, 0], meshes: range(7, b => b).flatMap(b => [0, 1].flatMap(t => [-2.5, 0, 2.5].map((z, k) => box([3.6, 2.4, 2.3], [-8 + b * 4, 6.3 + t * 2.5, z], STACK[(b + t * 2 + k) % STACK.length])))) },
-    { name: "Château et passerelle", explanation: "Château : il abrite la passerelle de navigation et les logements de l’équipage.", color: "#eef1f5", finish: "paint", explode: [-4.4, 3, 0], meshes: [box([5, 8, 7], [-14, 9, 0])] },
-    { name: "Cheminée", explanation: "Cheminée : évacuation des gaz du moteur principal, aujourd’hui équipée de systèmes de traitement des émissions.", color: "#b23a2a", finish: "paint", explode: [-2.4, 5, 0], meshes: [cyl(1, 3, [-15.5, 14.5, 0])] },
-    { name: "Hélice", explanation: "Hélice : entraînée par le moteur principal, elle propulse le navire ; sa vitesse est optimisée pour la consommation.", color: GOLD, finish: "metal", explode: [-4.4, -1.2, 0], meshes: [cyl(1.6, 0.4, [-19, 1.6, 0], [0, 0, Math.PI / 2])] },
-    { name: "Gouvernail", explanation: "Gouvernail : il oriente le navire, notamment lors des manœuvres d’accostage assistées par les remorqueurs.", color: "#3b4250", finish: "metal", explode: [-5.6, 0, 0], meshes: [box([0.3, 3, 1.6], [-19.9, 2.2, 0])] },
-  ],
-  wagon: [
-    { name: "Bogies", explanation: "Bogies : chariots pivotants qui portent le wagon et lui permettent de suivre les courbes de la voie.", color: "#4a5260", finish: "metal", explode: [0, -1.5, 0], meshes: [box([2.6, 0.6, 2], [-5, 0.95, 0]), box([2.6, 0.6, 2], [5, 0.95, 0])] },
-    { name: "Essieux montés", explanation: "Essieux montés : la charge par essieu admise par la voie fixe le tonnage que chaque wagon peut transporter.", color: "#151a22", finish: "metal", explode: [0, -2.6, 0], meshes: wheelRow([-5.9, -4.1, 4.1, 5.9], 0.75, 0.45, 0.2) },
-    { name: "Plateau porte-conteneurs", explanation: "Plateau du wagon porte-conteneurs : le rail massifie les volumes sur les longues distances, avec des ruptures de charge aux terminaux.", color: "#5a3d2b", explode: [0, 0.6, 0], meshes: [box([14, 0.4, 2.6], [0, 1.5, 0])] },
-    { name: "Verrous tournants", explanation: "Verrous tournants : ils fixent les conteneurs au plateau par leurs pièces de coin.", color: GOLD, finish: "metal", explode: [0, 1.4, 0], meshes: [-6.1, -0.1, 0.1, 6.1].flatMap(x => [box([0.2, 0.12, 0.2], [x, 1.76, -1.1]), box([0.2, 0.12, 0.2], [x, 1.76, 1.1])]) },
-    { name: "Conteneurs", explanation: "Deux conteneurs 20 pieds chargés : ils passeront du rail au navire ou au camion sans manutention de la marchandise.", color: "#1f5fa8", finish: "paint", explode: [0, 2.6, 0], meshes: [box([6, 2.6, 2.4], [-3.1, 3.1, 0], "#1f5fa8"), box([6, 2.6, 2.4], [3.1, 3.1, 0], "#b23a2a")] },
-    { name: "Attelages", explanation: "Attelages : ils relient les wagons entre eux pour former le train.", color: "#8a8f99", finish: "metal", explode: [1.6, 0, 0], meshes: [box([0.6, 0.3, 0.3], [-7.3, 1.3, 0]), box([0.6, 0.3, 0.3], [7.3, 1.3, 0])] },
-  ],
-  locomotive: [
-    { name: "Cabine de conduite", explanation: "Cabine de conduite : commandes informatisées et diagnostic embarqué, comme sur les locomotives GL30 mises en service par Sitarail en décembre 2025.", color: NAVY, finish: "paint", explode: [3.4, 1.2, 0], meshes: [box([3, 3.2, 2.9], [7.3, 3.2, 0]), box([0.08, 1, 2.3], [8.82, 3.9, 0], "#9fc3ea", "glass")] },
-    { name: "Capot moteur", explanation: "Capot : il protège la motorisation et s’ouvre pour la maintenance ; le liseré doré rappelle la charte Africa Global Logistics.", color: NAVY, finish: "paint", explode: [0, 4.8, 0], meshes: [box([12.6, 2.4, 2.6], [-0.6, 3.05, 0]), box([12.62, 0.18, 2.62], [-0.6, 2.4, 0], GOLD, "metal")] },
-    { name: "Moteur diesel", explanation: "Moteur diesel d’environ 3 000 chevaux : il entraîne l’alternateur, qui produit l’électricité de traction.", color: "#5b6470", finish: "metal", explode: [0, 3, 2.4], meshes: [box([5, 1.6, 1.5], [1.4, 2.7, 0]), ...range(6, i => -0.6 + i * 0.8).map(x => cyl(0.22, 0.5, [x, 3.7, 0], undefined, "#7a8494", "metal"))] },
-    { name: "Alternateur principal", explanation: "Alternateur principal : il convertit l’énergie du moteur en courant pour les moteurs de traction — d’où le nom diesel-électrique.", color: GOLD, finish: "metal", explode: [0, 3, -2.6], meshes: [cyl(0.8, 1.4, [-2.2, 2.7, 0], [0, 0, Math.PI / 2])] },
-    { name: "Radiateurs", explanation: "Radiateurs et ventilateurs : ils évacuent la chaleur du moteur, essentiel sous climat tropical.", color: "#8a96a6", finish: "metal", explode: [-2.8, 2.6, 0], meshes: [box([3, 1.2, 2.3], [-5.4, 3.7, 0]), cyl(0.5, 0.2, [-4.6, 4.4, 0], undefined, "#4a5260"), cyl(0.5, 0.2, [-6.2, 4.4, 0], undefined, "#4a5260")] },
-    { name: "Châssis", explanation: "Châssis porteur : il transmet l’effort de traction aux attelages ; une GL30 peut remorquer de l’ordre de 1 500 tonnes brutes.", color: "#4a5260", finish: "metal", explode: [0, 0.6, 0], meshes: [box([17.4, 0.45, 2.9], [0.4, 1.75, 0]), box([0.5, 0.4, 0.5], [9.3, 1.6, 0], GOLD, "metal"), box([0.5, 0.4, 0.5], [-8.5, 1.6, 0], GOLD, "metal")] },
-    { name: "Réservoir de carburant", explanation: "Réservoir de carburant suspendu sous le châssis, pour l’autonomie sur le corridor Abidjan – Ouagadougou.", color: "#3b4250", finish: "metal", explode: [0, -1.4, 2.6], meshes: [box([6, 0.9, 2.1], [0.4, 1.05, 0])] },
-    { name: "Bogies et moteurs de traction", explanation: "Bogies à trois essieux : chaque essieu porte un moteur électrique de traction qui fait avancer la locomotive.", color: "#3e4654", finish: "metal", explode: [0, -2.4, 0], meshes: [box([3.8, 0.6, 2.4], [5.8, 0.95, 0]), box([3.8, 0.6, 2.4], [-5, 0.95, 0]), ...[4.6, 5.8, 7, -6.2, -5, -3.8].flatMap(x => [wheel([x, 0.5, -0.8], 0.5, 0.2), wheel([x, 0.5, 0.8], 0.5, 0.2), cyl(0.32, 1, [x, 0.5, 0], [Math.PI / 2, 0, 0], GOLD, "metal")])] },
-  ],
-  locomotive_convoy: [
-    { name: "Grue mobile 400 t — porteur", explanation: "Grue automotrice de 400 tonnes : son porteur se cale sur stabilisateurs pour lever la locomotive au port.", color: "#e3b500", finish: "paint", explode: [0, -1.2, 4.4], meshes: [box([10, 1.2, 3], [-14, 1.5, 0]), ...wheelRow([-17.5, -16, -14.5, -12, -10.5], 1.4, 0.6, 0.5), box([6, 0.3, 0.3], [-14, 0.8, 0], "#4a5260", "metal")] },
-    { name: "Flèche télescopique", explanation: "Flèche télescopique : sa longueur et son angle déterminent la charge levable ; le plan de levage est calculé avant l’opération.", color: "#f2c200", finish: "paint", explode: [0, 4, 3], meshes: [box([3.4, 2.2, 2.8], [-14, 3.2, 0]), { shape: "box", size: [22, 1.1, 1.1], pos: [-6.2, 10.4, 0], rot: [0, 0, 0.62] }, cyl(0.05, 6, [2, 13.2, 0], undefined, "#cfd6e0")] },
-    { name: "Contrepoids", explanation: "Contrepoids : il équilibre la charge levée et garantit la stabilité de la grue.", color: "#3b4250", finish: "metal", explode: [-3.4, 1, 0], meshes: [box([2.6, 1.8, 2.8], [-17.6, 3.2, 0])] },
-    { name: "Locomotive", explanation: "Une des cinq locomotives (332,28 t au total) destinées à la pose des voies de la ligne 1 du métro d’Abidjan, pour Colas Rail.", color: NAVY, finish: "paint", explode: [0, 3.6, 0], meshes: [box([11, 2.6, 2.7], [4, 3.25, 0]), box([2.6, 3.3, 2.8], [10.4, 3.6, 0]), box([11.04, 0.2, 2.74], [4, 2.5, 0], GOLD, "metal")] },
-    { name: "Arrimage", explanation: "Arrimage par chaînes et calage : la charge ne doit pas bouger au freinage, en virage ni sur les dévers.", color: "#cfd6e0", finish: "metal", explode: [0, 1.8, 2.2], meshes: [-0.5, 3, 6.5, 9.5].flatMap(x => [strap(x, -1.6, 0.5), strap(x, 1.6, -0.5)]) },
-    { name: "Remorque hydraulique modulaire", explanation: "Remorques hydrauliques modulaires Nicolas : leur suspension hydraulique répartit la charge et maintient le plateau de niveau.", color: "#4b5566", finish: "metal", explode: [0, -0.4, 0], meshes: modular(-1.5, 10) },
-    { name: "Lignes d’essieux pendulaires", explanation: "Lignes d’essieux pendulaires : nombreuses roues pour répartir la masse sur la chaussée, et essieux directeurs pour tourner.", color: "#22272f", finish: "rubber", explode: [0, -2.2, 0], meshes: modularWheels(-1.5, 10) },
-    { name: "Tracteur 6×6", explanation: "Tracteur spécialisé 6×6 : la traction des convois lourds, sous escorte et en coordination avec les autorités.", color: "#f2f2f2", finish: "paint", explode: [3.8, 0.4, 0], meshes: tractor(16) },
-  ],
-  xmas_tree: [
-    { name: "Arbre de production (Xmas-tree)", explanation: "Arbre de production sous-marin : l’assemblage de vannes posé sur la tête de puits pour contrôler le débit d’hydrocarbures. Deux unités de 70 t chacune ont été reçues pour la phase 2 du projet Baleine.", color: GOLD, finish: "metal", explode: [0, 3.4, 0], meshes: [box([2.2, 2.4, 2.2], [0, 4.6, 0]), cyl(0.5, 1.4, [0, 6.5, 0], undefined, "#d4c08a", "metal")] },
-    { name: "Cadre de protection", explanation: "Cadre de protection : il supporte l’arbre et le protège pendant le transport, l’installation et l’exploitation en mer.", color: "#f2a900", finish: "paint", explode: [0, 1.6, 3.4], meshes: [...[[-1.8, -1.8], [-1.8, 1.8], [1.8, -1.8], [1.8, 1.8]].map(([x, z]) => box([0.25, 4.6, 0.25], [x, 4.1, z])), box([3.85, 0.25, 0.25], [0, 6.3, -1.8]), box([3.85, 0.25, 0.25], [0, 6.3, 1.8]), box([0.25, 0.25, 3.85], [-1.8, 6.3, 0]), box([0.25, 0.25, 3.85], [1.8, 6.3, 0])] },
-    { name: "Connecteur de tête de puits", explanation: "Connecteur de tête de puits : il verrouille l’arbre sur le puits au fond de la mer.", color: "#8a96a6", finish: "metal", explode: [0, -1.4, 0], meshes: [cyl(1.1, 1.2, [0, 2.4, 0])] },
-    { name: "Panneau ROV", explanation: "Panneau ROV : interface manœuvrée par un robot sous-marin pour actionner les vannes à grande profondeur.", color: "#1f5fa8", finish: "paint", explode: [3.4, 0.8, 0], meshes: [box([0.2, 1.4, 1.8], [1.95, 4.4, 0])] },
-    { name: "Raccord de conduite", explanation: "Raccord de conduite : il relie l’arbre aux lignes de production vers l’installation de surface.", color: "#b0b8c4", finish: "metal", explode: [-3.4, 0.6, 0], meshes: [cyl(0.32, 2.4, [-2.4, 4.2, 0], [0, 0, Math.PI / 2])] },
-    { name: "Touret de câble sous-marin", explanation: "Touret de câble sous-marin de 40 t, reçu avec les arbres de production lors de la même opération (≈ 235 t au total).", color: "#2e7d5b", finish: "paint", explode: [0, 1, -5.6], meshes: [cyl(2, 0.25, [9.5, 3.4, -1.3], [Math.PI / 2, 0, 0]), cyl(2, 0.25, [9.5, 3.4, 1.3], [Math.PI / 2, 0, 0]), cyl(1.4, 2.4, [9.5, 3.4, 0], [Math.PI / 2, 0, 0], "#111")] },
-    { name: "Remorque modulaire 10 lignes", explanation: "Remorque hydraulique modulaire Nicolas 10 lignes, d’une capacité de 160 t, du quai 25 du port jusqu’à la base AGL de Vridi.", color: "#4b5566", finish: "metal", explode: [0, -1.2, 0], meshes: [...modular(-4, 10), ...modularWheels(-4, 10)] },
-    { name: "Tracteur 6×6 de 500 ch", explanation: "Tracteur 6×6 de 500 chevaux, après une étude de route qui a levé les obstacles sur l’itinéraire.", color: "#f2f2f2", finish: "paint", explode: [3.6, 0.4, 0], meshes: tractor(13.5) },
-  ],
-  tank_convoy: [
-    { name: "Cuve hors gabarit", explanation: "Cuve industrielle hors gabarit pour la brasserie Brakina : deux cuves de 50 t au total, sur plus de 1 300 km d’Abidjan à Ouagadougou.", color: "#d6dde6", finish: "metal", explode: [0, 3.4, 0], meshes: [cyl(2.3, 12, [-1, 3.9, 0], [0, 0, Math.PI / 2]), { shape: "sphere", size: [2.3, 2.3, 2.3], pos: [5, 3.9, 0] }, { shape: "sphere", size: [2.3, 2.3, 2.3], pos: [-7, 3.9, 0] }] },
-    { name: "Berceaux de calage", explanation: "Berceaux de calage : ils épousent la forme de la cuve et répartissent la charge sur le plateau sans la déformer.", color: GOLD, finish: "metal", explode: [0, 1.2, 3], meshes: [-5, -1, 3].map(x => box([0.6, 0.9, 3.6], [x, 1.8, 0])) },
-    { name: "Remorque surbaissée", explanation: "Remorque surbaissée : elle abaisse la hauteur totale pour passer sous les ponts et les lignes électriques.", color: "#4b5566", finish: "metal", explode: [0, -0.6, 0], meshes: [box([15, 0.4, 3], [-1, 1.15, 0]), ...wheelRow([-6.5, -7.7, -8.9, 4.5], 1.15, 0.5, 0.4)] },
-    { name: "Tracteur routier", explanation: "Tracteur routier : 15 jours de convoi, avec un détour de plus de 100 km par Agboville pour éviter les ouvrages incompatibles.", color: "#f2f2f2", finish: "paint", explode: [3.6, 0.4, 0], meshes: tractor(10) },
-    { name: "Escorte", explanation: "Véhicules d’escorte : signalisation, régulation de la circulation et guidage aux passages délicats (ponts, péages).", color: "#f2a900", finish: "paint", explode: [4, 0, 3.6], meshes: [box([4.2, 1.6, 2], [21, 1.1, 0]), box([1.4, 0.3, 1.4], [21, 2.05, 0], "#ff7a00", "glass"), ...wheelRow([22.4, 19.6], 0.9, 0.4, 0.3)] },
-    { name: "Gabarit et réseau électrique", explanation: "Franchissement du réseau électrique : les lignes basses sont relevées ou mises hors tension en coordination avec les gestionnaires.", color: "#8a96a6", finish: "metal", explode: [0, 2.6, -4], meshes: [box([0.4, 8.5, 0.4], [-11, 4.25, -5]), box([0.4, 8.5, 0.4], [-11, 4.25, 5]), cyl(0.03, 10, [-11, 8.2, 0], [Math.PI / 2, 0, 0], "#111"), cyl(0.03, 10, [-11, 7.6, 0], [Math.PI / 2, 0, 0], "#111")] },
-  ],
-  terminal: [
-    { name: "Quai", explanation: "Quai de 1 100 m avec 16 m de tirant d’eau à Côte d’Ivoire Terminal : il accueille de très grands porte-conteneurs.", color: "#7d8796", finish: "paint", explode: [0, -1.6, 0], meshes: [box([46, 1.2, 14], [0, 0.6, -4])] },
-    { name: "Porte-conteneurs", explanation: "Porte-conteneurs à quai : le terminal accueille des navires capables de transporter jusqu’à 24 000 conteneurs.", color: NAVY, finish: "paint", explode: [0, -1, 6], meshes: [box([40, 4, 8], [0, 0.4, 9]), ...range(9, b => b).flatMap(b => [0, 1].flatMap(t => [-2.4, 0, 2.4].map((z, k) => box([3.6, 1.6, 2.2], [-15 + b * 3.8, 3.2 + t * 1.7, 9 + z], STACK[(b + t + k) % STACK.length]))))] },
-    { name: "Portiques de quai (STS)", explanation: "Portiques de quai : 8 depuis juillet 2025, les deux derniers entièrement électriques.", color: "#2f6db5", finish: "paint", explode: [0, 4, 0], meshes: [-10, 8].flatMap(x => [box([0.5, 13, 0.5], [x - 3, 7.7, -1]), box([0.5, 13, 0.5], [x + 3, 7.7, -1]), box([0.5, 13, 0.5], [x - 3, 7.7, 5]), box([0.5, 13, 0.5], [x + 3, 7.7, 5]), box([0.9, 0.9, 22], [x, 14.4, 5]), box([2, 0.9, 2], [x, 13.4, 9], GOLD, "metal")]) },
-    { name: "Portiques de parc (RTG)", explanation: "Portiques de parc sur pneus : 27 depuis juillet 2025, dont 9 nouveaux entièrement électriques.", color: GOLD, finish: "paint", explode: [0, 3.4, -4], meshes: [-14, 2, 16].flatMap(x => [box([0.4, 7, 0.4], [x - 3, 4.7, -6.5]), box([0.4, 7, 0.4], [x + 3, 4.7, -6.5]), box([0.4, 7, 0.4], [x - 3, 4.7, -0.5]), box([0.4, 7, 0.4], [x + 3, 4.7, -0.5]), box([6.6, 0.6, 0.6], [x, 8.2, -6.5]), box([6.6, 0.6, 0.6], [x, 8.2, -0.5])]) },
-    { name: "Parc à conteneurs", explanation: "Parc à conteneurs de 37,5 ha : une capacité de plus de 1,5 million d’EVP par an.", color: "#b23a2a", finish: "paint", explode: [0, 1.6, -5], meshes: range(12, i => i).flatMap(i => range(2, t => t).map(t => box([5.4, 1.4, 2.2], [-18 + (i % 6) * 7, 1.9 + t * 1.45, -6 + Math.floor(i / 6) * 2.8], STACK[(i + t) % STACK.length]))) },
-    { name: "Camions de terminal", explanation: "Camions de terminal : ils relient en continu les portiques de quai et les portiques de parc.", color: "#f2f2f2", finish: "paint", explode: [0, 1.2, 3.6], meshes: [-6, 4, 12].flatMap((x, i) => [box([1.6, 1.6, 1.6], [x + 2.2, 2, 2.4]), box([4.4, 0.4, 1.8], [x, 1.4, 2.4], "#4a5260", "metal"), box([4, 1.3, 2], [x - 0.4, 2.25, 2.4], STACK[i % STACK.length])]) },
-  ],
-  mri: [
-    { name: "Capots", explanation: "Capots extérieurs : ils protègent les équipements et facilitent le nettoyage en milieu hospitalier.", color: "#f4f6f9", finish: "paint", explode: [0, 0, -3.4], meshes: [box([1.6, 2.6, 2.7], [0, 1.5, 0])] },
-    { name: "Aimant supraconducteur", explanation: "Aimant supraconducteur dans son cryostat refroidi à l’hélium liquide : la pièce la plus lourde et la plus sensible, à manipuler sans choc.", color: "#9aa6b8", finish: "metal", explode: [-3, 0, 0], meshes: [cyl(1.1, 1.5, [0, 1.5, 0], [0, 0, Math.PI / 2])] },
-    { name: "Bobines de gradient", explanation: "Bobines de gradient : elles font varier le champ magnétique pour localiser le signal et construire l’image en coupes.", color: GOLD, finish: "metal", explode: [3, 0, 0], meshes: [cyl(0.82, 1.4, [0, 1.5, 0], [0, 0, Math.PI / 2])] },
-    { name: "Antenne radiofréquence", explanation: "Antenne radiofréquence : elle émet les impulsions et capte le signal renvoyé par les tissus.", color: "#5b8fd0", finish: "metal", explode: [5.2, 0.6, 0], meshes: [cyl(0.6, 1.2, [0, 1.5, 0], [0, 0, Math.PI / 2])] },
-    { name: "Tête froide", explanation: "Tête froide du cryocompresseur : elle maintient l’hélium à très basse température.", color: "#3b4250", finish: "metal", explode: [0, 2.2, 0], meshes: [cyl(0.2, 0.8, [0, 3, 0])] },
-    { name: "Table patient", explanation: "Table patient motorisée : elle positionne la zone à examiner au centre de l’aimant.", color: "#e8edf3", finish: "paint", explode: [0, 0, 3.4], meshes: [box([3.6, 0.15, 0.7], [2.6, 1.05, 0]), box([0.8, 0.9, 0.6], [3.6, 0.45, 0], "#cfd6e0")] },
-    { name: "Socle de transport", explanation: "Socle et calage de transport : trois IRM, plus de 32 t d’équipements, levées et positionnées dans les CHU de Cocody, Treichville et Angré.", color: "#6b4f2a", explode: [0, -1.2, 0], meshes: [box([2.8, 0.25, 2.8], [0, 0.12, 0])] },
-  ],
-  haul_truck: [
-    { name: "Benne", explanation: "Benne basculante : elle transporte le minerai ou les stériles depuis le front de taille.", color: "#e3b500", finish: "paint", explode: [0, 4.6, 0], meshes: [box([8, 2.6, 5.6], [-1.6, 5.2, 0]), box([2.6, 0.3, 5.6], [3.6, 6.4, 0])] },
-    { name: "Vérins de levage", explanation: "Vérins hydrauliques : ils basculent la benne pour vider la charge au concasseur ou à la verse.", color: "#cfd6e0", finish: "metal", explode: [0, 2.2, 3.6], meshes: [cyl(0.25, 2.6, [0.6, 3.4, -1.6], [0, 0, 0.5]), cyl(0.25, 2.6, [0.6, 3.4, 1.6], [0, 0, 0.5])] },
-    { name: "Cabine", explanation: "Cabine surélevée : visibilité dégagée sur un engin de plusieurs mètres de haut.", color: "#f2f2f2", finish: "paint", explode: [2.6, 2.6, -2.4], meshes: [box([1.8, 1.8, 1.8], [4.4, 5.4, -1.6]), box([0.06, 0.9, 1.4], [5.32, 5.6, -1.6], "#9fc3ea", "glass")] },
-    { name: "Moteur et radiateur", explanation: "Moteur et radiateur à l’avant : la puissance nécessaire pour gravir les rampes de la mine en charge.", color: "#4a5260", finish: "metal", explode: [4, 0.6, 0], meshes: [box([2.4, 2.4, 3.4], [4.6, 2.9, 0]), box([0.2, 2, 3], [5.9, 2.9, 0], "#5b6470")] },
-    { name: "Châssis", explanation: "Châssis renforcé : il encaisse les chocs du chargement par pelle ou chargeuse.", color: "#3b4250", finish: "metal", explode: [0, 0.4, 0], meshes: [box([10, 0.8, 2.4], [0, 2.4, 0])] },
-    { name: "Roues géantes", explanation: "Pneus géants : leur taille dépasse souvent celle d’un adulte, d’où des convois exceptionnels pour livrer ces engins sur site.", color: "#22272f", finish: "rubber", explode: [0, -1.8, 0], meshes: [...wheelRow([4.2], 2.1, 1.6, 1.2, 1.6), ...wheelRow([-3.8], 1.6, 1.6, 1, 1.6), ...wheelRow([-3.8], 2.7, 1.6, 1, 1.6)] },
-  ],
-};
+import type { V3, PartDef } from "@/lib/model3d";
+import { detailedModel } from "@/lib/model3d-detail";
+import { Model3DMeshes, partBounds } from "./Model3DMeshes";
+const STACK = ["#a43c2e", "#295977", "#c39a40", "#476b5b", "#e8e8e8", "#675368"];
+type View = "perspective" | "side" | "top";
+const NO_PARTS: Part3D[] = [];
 
 // Assemblage personnalisé : chaque pièce s’écarte du centre de l’objet.
 function customParts(parts: Part3D[]): PartDef[] {
   const pos = parts.map(p => p.position ?? [0, 0, 0] as V3);
-  const c = [0, 1, 2].map(i => pos.reduce((a, p) => a + p[i], 0) / pos.length);
+  const c = [0, 1, 2].map(i => pos.reduce((a, p) => a + p[i], 0) / Math.max(1, pos.length));
   return parts.map((p, i) => {
     const d = [0, 1, 2].map(k => pos[i][k] - c[k]); const n = Math.hypot(...d) || 1;
     const dir = (Math.hypot(...d) < 0.01 ? [0, 1, 0] : d.map(v => v / n)) as V3;
@@ -150,162 +26,152 @@ function customParts(parts: Part3D[]): PartDef[] {
   });
 }
 
-function Geometry({ m }: { m: Mesh }) {
-  if (m.shape === "cylinder") return <cylinderGeometry args={[m.size[0], m.size[2] ?? m.size[0], m.size[1], 40]} />;
-  if (m.shape === "sphere") return <sphereGeometry args={[m.size[0], 40, 20]} />;
-  if (m.shape === "cone") return <coneGeometry args={[m.size[0], m.size[1], 40]} />;
-  return <boxGeometry args={m.size} />;
-}
-// Finitions : peinture vernie, métal brossé, caoutchouc mat, vitrage.
-const FINISH: Record<Finish, { metalness: number; roughness: number; clearcoat: number; transmission?: number }> = {
-  paint: { metalness: 0.2, roughness: 0.38, clearcoat: 0.8 },
-  metal: { metalness: 0.55, roughness: 0.32, clearcoat: 0.4 },
-  rubber: { metalness: 0, roughness: 0.9, clearcoat: 0 },
-  glass: { metalness: 0.1, roughness: 0.05, clearcoat: 1, transmission: 0.4 },
-};
-const meshCenter = (p: PartDef) => [0, 1, 2].map(k => p.meshes.reduce((a, m) => a + m.pos[k], 0) / p.meshes.length) as V3;
-
-function Part({ part, index, target, delay, active, dimmed, annotate, onSelect, labels }: { part: PartDef; index: number; target: number; delay: number; active: boolean; dimmed: boolean; annotate: boolean; onSelect: () => void; labels: React.RefObject<HTMLDivElement | null> }) {
+function Part({ part, bounds, index, target, active, dimmed, annotate, onSelect, labels }: { part: PartDef; bounds: Box3; index: number; target: number; active: boolean; dimmed: boolean; annotate: boolean; onSelect: () => void; labels: React.RefObject<HTMLDivElement | null> }) {
   const ref = useRef<Group>(null);
-  const mats = useRef<MeshPhysicalMaterial[]>([]);
-  const progress = useRef(0); const since = useRef(0); const last = useRef(target);
-  const center = useMemo(() => meshCenter(part), [part]);
-  const top = useMemo(() => Math.max(...part.meshes.map(m => m.pos[1] + m.size[1] / 2)), [part]);
-  // Décomposition en cascade : chaque pièce part avec un léger décalage, puis s’amortit ; focus et surbrillance en fondu.
+  const progress = useRef(0);
+  const invalidate = useThree(s => s.invalidate);
+  const center = bounds.getCenter(new Vector3());
   useFrame((_, dt) => {
-    const g = ref.current; if (!g) return;
-    if (last.current !== target) { last.current = target; since.current = 0; }
-    since.current += dt;
-    if (since.current > delay) progress.current += (target - progress.current) * Math.min(1, dt * 3);
-    const t = progress.current;
-    g.position.set(part.explode[0] * t, part.explode[1] * t, part.explode[2] * t);
-    for (const m of mats.current) { const goal = dimmed ? 0.16 : 1; m.opacity += (goal - m.opacity) * Math.min(1, dt * 6); m.transparent = m.opacity < 0.99; m.depthWrite = m.opacity > 0.5; m.emissiveIntensity += ((active ? 0.45 : 0) - m.emissiveIntensity) * Math.min(1, dt * 6); }
+    if (!ref.current) return;
+    progress.current += (target - progress.current) * (1 - Math.exp(-Math.min(dt, 0.1) * 5));
+    ref.current.position.set(...part.explode.map(v => v * progress.current) as V3);
+    if (Math.abs(target - progress.current) > 0.0001) invalidate();
   });
-  return (
-    <group ref={ref} onClick={e => { e.stopPropagation(); onSelect(); }}>
-      {part.meshes.map((m, i) => { const f = FINISH[m.finish ?? part.finish ?? "paint"]; return (
-        <mesh key={i} position={m.pos} rotation={m.rot ?? [0, 0, 0]}>
-          <Geometry m={m} />
-          <meshPhysicalMaterial ref={el => { if (el && !mats.current.includes(el)) mats.current.push(el); }} color={m.color ?? part.color} metalness={f.metalness} roughness={f.roughness} clearcoat={f.clearcoat} clearcoatRoughness={0.2} transmission={f.transmission ?? 0} emissive={GOLD} emissiveIntensity={0} envMapIntensity={1.5} />
-        </mesh>); })}
-      <Html position={annotate ? [center[0], top + 0.7 + (index % 2) * 1.1, center[2]] : center} center zIndexRange={[20, 0]} portal={labels as React.RefObject<HTMLElement>}>
-        <button className={`x3d-pin ${active ? "on" : ""} ${annotate ? "label" : ""} ${dimmed ? "dim" : ""}`} onClick={onSelect} aria-label={`${index + 1}. ${part.name}`}>
-          <b>{index + 1}</b>{annotate && <span>{part.name}</span>}
-        </button>
-      </Html>
-    </group>
-  );
+  return <group ref={ref} onClick={e => { if (e.delta > 5) return; e.stopPropagation(); onSelect(); }}>
+    <Model3DMeshes part={part} active={active} dimmed={dimmed} />
+    {annotate && <Html position={[center.x, bounds.max.y + 0.45, center.z]} center zIndexRange={[20, 0]} portal={labels as React.RefObject<HTMLElement>}>
+      <button className={`x3d-pin label ${active ? "on" : ""} ${dimmed ? "dim" : ""}`} onClick={onSelect} aria-label={`${index + 1}. ${part.name}`}><b>{index + 1}</b><span>{part.name}</span></button>
+    </Html>}
+  </group>;
 }
 
-// Caméra : vol d’introduction, puis cadrage sur la pièce choisie ou sur l’ensemble.
-function Camera({ center, radius, focus }: { center: V3; radius: number; focus: { pos: V3; size: number } | null }) {
+function Camera({ bounds, focus, view, reset, rotate, onInteract }: { bounds: Box3; focus: Box3 | null; view: View; reset: number; rotate: boolean; onInteract: () => void }) {
   const ref = useRef<CameraControls>(null);
-  useEffect(() => { const c = ref.current; if (!c) return; void c.setLookAt(radius * 3.2, center[1] + radius * 2.2, radius * 3.2, 0, center[1], 0, false).then(() => c.setLookAt(radius * 1.7, center[1] + radius * 0.85, radius * 1.7, 0, center[1], 0, true)); }, [center, radius]);
+  const initialized = useRef(false);
+  const { size, invalidate } = useThree();
+  const radius = bounds.getSize(new Vector3()).length() / 2;
   useEffect(() => {
-    const c = ref.current; if (!c) return;
-    if (focus) { const d = Math.max(4, focus.size * 2.6); void c.setLookAt(focus.pos[0] + d * 0.9, focus.pos[1] + d * 0.6, focus.pos[2] + d * 0.9, focus.pos[0], focus.pos[1], focus.pos[2], true); }
-    else void c.setLookAt(radius * 1.7, center[1] + radius * 0.85, radius * 1.7, 0, center[1], 0, true);
-  }, [focus, center, radius]);
-  return <CameraControls ref={ref} makeDefault minDistance={2} maxDistance={radius * 5} smoothTime={0.6} />;
+    const controls = ref.current;
+    if (!controls) return;
+    const target = focus ?? bounds;
+    const center = target.getCenter(new Vector3());
+    const direction = new Vector3(...(view === "top" ? [0, 1, 0.001] : view === "side" ? [0, 0.08, 1] : [0.9, 0.58, 1.3])).normalize();
+    const right = new Vector3().crossVectors(new Vector3(0, 1, 0), direction).normalize();
+    const up = new Vector3().crossVectors(direction, right);
+    const tangent = Math.tan(36 * Math.PI / 360), aspect = size.width / Math.max(size.height, 1);
+    let distance = 1;
+    // Fit all projected corners, including long convoys on portrait screens.
+    for (const x of [target.min.x, target.max.x]) for (const y of [target.min.y, target.max.y]) for (const z of [target.min.z, target.max.z]) {
+      const corner = new Vector3(x, y, z).sub(center);
+      distance = Math.max(distance, corner.dot(direction) + Math.max(Math.abs(corner.dot(right)) / (tangent * aspect), Math.abs(corner.dot(up)) / tangent));
+    }
+    const position = center.clone().addScaledVector(direction, distance * 1.28);
+    void controls.setLookAt(...position.toArray(), ...center.toArray(), initialized.current);
+    initialized.current = true;
+  }, [bounds, focus, view, reset, size.width, size.height]);
+  useFrame((_, dt) => { if (rotate && ref.current) { ref.current.azimuthAngle += Math.min(dt, 0.1) * 0.12; invalidate(); } });
+  return <CameraControls ref={ref} makeDefault smoothTime={0.45} minDistance={Math.max(0.8, radius * 0.12)} maxDistance={radius * 12} minPolarAngle={0.001} maxPolarAngle={Math.PI * 0.49} onControlStart={onInteract} />;
 }
-function Spin({ on, children }: { on: boolean; children: React.ReactNode }) {
+
+function Ground({ floor, radius }: { floor: number; radius: number }) {
   const ref = useRef<Group>(null);
-  useFrame((_, dt) => { if (on && ref.current) ref.current.rotation.y += dt * 0.12; });
-  return <group ref={ref}>{children}</group>;
+  const invalidate = useThree(s => s.invalidate);
+  useFrame((_, dt) => { if (ref.current) { ref.current.position.y += (floor - ref.current.position.y) * (1 - Math.exp(-Math.min(dt, 0.1) * 7)); if (Math.abs(floor - ref.current.position.y) > 0.0001) invalidate(); } });
+  return <group ref={ref} position={[0, floor, 0]}><mesh rotation-x={-Math.PI / 2} receiveShadow><planeGeometry args={[radius * 200, radius * 200]} /><meshStandardMaterial color="#aeb8b8" roughness={0.95} /></mesh></group>;
+}
+
+function SceneReady({ onReady }: { onReady: () => void }) {
+  useEffect(onReady, [onReady]);
+  return null;
 }
 
 export function Exploded3D({ object, parts, intro, en, height }: { object: Model3DKind; parts: Part3D[]; intro?: string; en: boolean; height?: number }) {
-  const defs = useMemo<PartDef[]>(() => {
-    if (object === "custom") return customParts(parts);
-    // Les explications de Lara remplacent celles par défaut, dans l’ordre de visite.
-    return PRESETS[object].map((p, i) => parts[i] ? { ...p, name: parts[i].name || p.name, explanation: parts[i].explanation || p.explanation } : p);
-  }, [object, parts]);
-  // Cadrage sur la boîte englobante, positions éclatées comprises.
-  const { center, radius, floor } = useMemo(() => {
-    const lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
-    for (const d of defs) for (const m of d.meshes) for (let k = 0; k < 3; k++) { const half = m.shape === "box" ? m.size[k] / 2 : Math.max(m.size[0], m.size[1] / 2); for (const off of [0, d.explode[k]]) { lo[k] = Math.min(lo[k], m.pos[k] + off - half); hi[k] = Math.max(hi[k], m.pos[k] + off + half); } }
-    return { center: [(lo[0] + hi[0]) / 2, (lo[1] + hi[1]) / 2, (lo[2] + hi[2]) / 2] as V3, radius: Math.max(2.5, Math.hypot(hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2]) / 2), floor: Math.min(0, lo[1]) - 0.05 };
-  }, [defs]);
+  const supplied = parts.length ? parts : NO_PARTS;
+  const defs = useMemo<PartDef[]>(() => object === "custom" ? customParts(supplied) : detailedModel(object).map((p, i) => supplied[i] ? { ...p, name: supplied[i].name || p.name, explanation: supplied[i].explanation || p.explanation } : p), [object, supplied]);
+  const boxes = useMemo(() => defs.map(partBounds), [defs]);
   const [exploded, setExploded] = useState(false);
+  const [spread, setSpread] = useState(1);
   const [active, setActive] = useState<number | null>(null);
   const [touring, setTouring] = useState(false);
-  const [annotate, setAnnotate] = useState(true);
+  const [annotate, setAnnotate] = useState(false);
   const [focusMode, setFocusMode] = useState(true);
-  const [moved, setMoved] = useState(false);
+  const [rotate, setRotate] = useState(false);
+  const [view, setView] = useState<View>("perspective");
+  const [reset, setReset] = useState(0);
+  const [ready, setReady] = useState(false);
   const labels = useRef<HTMLDivElement>(null);
+  const amount = exploded ? spread : 0;
+  const posed = useMemo(() => boxes.map((box, i) => box.clone().translate(new Vector3(...defs[i].explode).multiplyScalar(amount))), [boxes, defs, amount]);
+  const bounds = useMemo(() => {
+    const result = new Box3(); posed.forEach(b => result.union(b));
+    return result.isEmpty() ? new Box3(new Vector3(-1, 0, -1), new Vector3(1, 2, 1)) : result;
+  }, [posed]);
+  const radius = Math.max(2, bounds.getSize(new Vector3()).length() / 2);
+  const current = active === null ? null : defs[active];
+  const focus = active !== null && focusMode ? posed[active] ?? null : null;
+  const select = (i: number) => { setActive(i); setTouring(false); setRotate(false); sfx("tick"); };
+  const resetView = () => { setActive(null); setTouring(false); setRotate(false); setExploded(false); setSpread(1); setView("perspective"); setReset(v => v + 1); };
 
-  // L’objet apparaît assemblé, puis se décompose seul.
-  useEffect(() => { const id = setTimeout(() => { setExploded(true); sfx("whoosh"); }, 1800); return () => clearTimeout(id); }, []);
-  // Visite guidée : la caméra vole vers chaque pièce, qui s’illumine et que Lara explique.
   useEffect(() => {
     if (!touring) return;
-    let i = 0; let stop = false;
+    let i = 0, stopped = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
     const step = async () => {
-      if (stop) return;
+      if (stopped) return;
       if (i >= defs.length) { setTouring(false); setActive(null); return; }
       setActive(i); sfx("tick");
       const started = Date.now();
-      await playServerVoice(`${defs[i].name}. ${defs[i].explanation}`, en ? "en" : "fr");
-      const wait = Math.max(0, 3800 - (Date.now() - started));
-      i++; setTimeout(step, wait);
+      try { await playServerVoice(`${defs[i].name}. ${defs[i].explanation}`, en ? "en" : "fr"); } catch { /* Written explanations remain available. */ }
+      if (stopped) return;
+      i++; timer = setTimeout(step, Math.max(0, 3800 - (Date.now() - started)));
     };
     void step();
-    return () => { stop = true; stopServerVoice(); };
+    return () => { stopped = true; clearTimeout(timer); stopServerVoice(); };
   }, [touring, defs, en]);
   useEffect(() => () => stopServerVoice(), []);
+  const onReady = useMemo(() => () => setReady(true), []);
 
-  const current = active === null ? null : defs[active];
-  const focus = useMemo(() => {
-    if (!current || !focusMode) return null;
-    const c = meshCenter(current).map((v, k) => v + (exploded ? current.explode[k] : 0)) as V3;
-    const size = Math.max(...current.meshes.flatMap(m => [Math.abs(m.pos[0] - c[0]) * 2 + m.size[0], m.size[1], Math.abs(m.pos[2] - c[2]) * 2 + m.size[2]]));
-    return { pos: [c[0] - center[0], c[1], c[2] - center[2]] as V3, size: Math.min(size, radius) };
-  }, [current, focusMode, exploded, center, radius]);
-  const select = (i: number) => { setActive(i); setTouring(false); setMoved(true); sfx("tick"); };
-
-  return (
-    <div className="x3d">
-      <div className="x3d-stage" style={height ? { height } : undefined}>
-        <Canvas dpr={[1, 2]} camera={{ position: [radius * 2, center[1] + radius, radius * 2], fov: 36, near: 0.1, far: radius * 20 }} onPointerDown={() => setMoved(true)} onPointerMissed={() => setActive(null)}>
-          <color attach="background" args={["#061430"]} />
-          <fog attach="fog" args={["#061430", radius * 4.5, radius * 10]} />
-          {/* Studio d’éclairage local (aucun téléchargement) : reflets réalistes sur la peinture et le métal */}
-          <Environment resolution={256} frames={1}>
-            <Lightformer intensity={2.2} position={[0, 6, -6]} scale={[12, 3, 1]} color="#ffffff" />
-            <Lightformer intensity={1.4} position={[-8, 3, 4]} rotation-y={Math.PI / 2} scale={[10, 4, 1]} color="#bcd4ff" />
-            <Lightformer intensity={1.6} position={[8, 2, 2]} rotation-y={-Math.PI / 2} scale={[8, 3, 1]} color={GOLD} />
-            <Lightformer form="ring" intensity={1.2} position={[0, 9, 0]} rotation-x={Math.PI / 2} scale={5} color="#ffffff" />
-          </Environment>
-          <hemisphereLight args={["#e4eeff", "#2a5196", 0.9]} />
-          <directionalLight position={[radius, radius * 1.6, radius * 0.6]} intensity={1.8} />
-          <directionalLight position={[-radius * 1.2, radius * 0.8, radius]} intensity={0.9} color="#fff4dc" />
-          <directionalLight position={[0, radius * 0.6, -radius * 1.4]} intensity={0.7} color="#9fc3ea" />
-          <Camera center={center} radius={radius} focus={focus} />
-          <Spin on={!moved && !touring}>
-            <group position={[-center[0], 0, -center[2]]}>
-              {defs.map((p, i) => <Part key={i} part={p} index={i} target={exploded ? 1 : 0} delay={i * 0.12} active={active === i} dimmed={focusMode && active !== null && active !== i} annotate={annotate && exploded} onSelect={() => select(i)} labels={labels} />)}
-            </group>
-          </Spin>
-          {/* Le sol passe sous le point le plus bas de l’objet décomposé : aucune pièce ne disparaît. */}
-          <ContactShadows position={[0, floor + 0.02, 0]} opacity={0.5} scale={radius * 3.2} blur={2.4} far={radius} color="#000814" />
-          <mesh rotation-x={-Math.PI / 2} position={[0, floor, 0]}><circleGeometry args={[radius * 1.7, 96]} /><meshStandardMaterial color="#0a1f40" metalness={0.4} roughness={0.6} /></mesh>
-          <mesh rotation-x={-Math.PI / 2} position={[0, floor + 0.01, 0]}><ringGeometry args={[radius * 1.66, radius * 1.7, 128]} /><meshBasicMaterial color={GOLD} transparent opacity={0.55} /></mesh>
-        </Canvas>
-        <div ref={labels} className="x3d-labels" />
-        <div className="x3d-controls">
-          <button aria-pressed={exploded} onClick={() => { setExploded(v => !v); sfx("whoosh"); }}>{exploded ? <Boxes size={16} /> : <Layers size={16} />}{exploded ? (en ? "Assemble" : "Assembler") : (en ? "Explode" : "Décomposer")}</button>
-          <button aria-pressed={touring} onClick={() => { if (touring) { setTouring(false); stopServerVoice(); } else { setExploded(true); setMoved(true); setTouring(true); } }}>{touring ? <Square size={16} /> : <Play size={16} />}{touring ? (en ? "Stop tour" : "Arrêter la visite") : (en ? "Guided tour" : "Visite guidée")}</button>
-          <button aria-pressed={annotate} onClick={() => setAnnotate(v => !v)}><Tags size={16} />{en ? "Labels" : "Annotations"}</button>
-          <button aria-pressed={focusMode} onClick={() => setFocusMode(v => !v)}><Focus size={16} />Focus</button>
-        </div>
-        {current && <div className="x3d-callout" aria-live="polite"><span className="eyebrow">{String((active ?? 0) + 1).padStart(2, "0")} / {String(defs.length).padStart(2, "0")}</span><h4>{current.name}</h4><p>{current.explanation}</p></div>}
+  return <div className="x3d" data-model={object} data-ready={ready}>
+    <div className="x3d-stage" style={height ? { height } : undefined}>
+      <Canvas frameloop="demand" shadows={{ type: PCFShadowMap }} dpr={[1, 1.5]} camera={{ position: [radius * 2, radius, radius * 2], fov: 36, near: 0.05, far: radius * 250 }} gl={{ antialias: true, toneMapping: ACESFilmicToneMapping, toneMappingExposure: 1.08 }} onPointerMissed={() => setActive(null)} fallback={<div className="x3d-fallback">{en ? "3D is unavailable on this device. Explore the parts below." : "La 3D est indisponible sur cet appareil. Découvrez les pièces ci-dessous."}</div>}>
+        <color attach="background" args={["#c6cecc"]} />
+        <fog attach="fog" args={["#c6cecc", radius * 7, radius * 22]} />
+        <Environment resolution={256} frames={1}>
+          <Lightformer intensity={2.8} position={[0, 8, 0]} rotation-x={Math.PI / 2} scale={[12, 8, 1]} color="#fff9ec" />
+          <Lightformer intensity={1.4} position={[-8, 4, 4]} rotation-y={Math.PI / 2} scale={[10, 5, 1]} color="#d8e7f0" />
+          <Lightformer intensity={2} position={[8, 3, -4]} rotation-y={-Math.PI / 2} scale={[5, 8, 1]} color="#ffffff" />
+        </Environment>
+        <hemisphereLight args={["#f3f6f6", "#777c72", 1.15]} />
+        <directionalLight castShadow position={[-radius * 0.7, radius * 2, radius * 1.4]} intensity={3.2} color="#fff3df" shadow-mapSize={[2048, 2048]} shadow-camera-left={-radius * 1.5} shadow-camera-right={radius * 1.5} shadow-camera-top={radius * 1.5} shadow-camera-bottom={-radius * 1.5} shadow-camera-near={0.1} shadow-camera-far={radius * 8} shadow-normalBias={0.035} shadow-bias={-0.00015} />
+        <directionalLight position={[radius, radius, -radius]} intensity={0.8} color="#d2e5f5" />
+        <Camera bounds={bounds} focus={focus} view={view} reset={reset} rotate={rotate} onInteract={() => setRotate(false)} />
+        {defs.map((part, i) => <Part key={i} part={part} bounds={boxes[i]} index={i} target={amount} active={active === i} dimmed={focusMode && active !== null && active !== i} annotate={annotate} onSelect={() => select(i)} labels={labels} />)}
+        <Ground floor={bounds.min.y - 0.035} radius={radius} />
+        <SceneReady onReady={onReady} />
+      </Canvas>
+      <div ref={labels} className="x3d-labels" />
+      <div className="x3d-scene-tag"><span />{en ? "EQUIPMENT EXPLORER" : "EXPLORATION DES ÉQUIPEMENTS"}<small>{exploded ? (en ? "Exploded view" : "Vue décomposée") : (en ? "Assembled view" : "Vue assemblée")}</small></div>
+      <div className="x3d-camera-controls" aria-label={en ? "Camera views" : "Vues de la caméra"}>
+        {(["perspective", "side", "top"] as const).map(v => <button key={v} aria-pressed={view === v} onClick={() => { setView(v); setRotate(false); setActive(null); setReset(n => n + 1); }}>{v === "perspective" ? "3/4" : v === "side" ? (en ? "Side" : "Profil") : (en ? "Top" : "Dessus")}</button>)}
+        <button onClick={resetView} aria-label={en ? "Reset view" : "Réinitialiser la vue"}><RotateCcw size={15} /></button>
       </div>
-      <div className="x3d-side">
-        {intro && <p className="x3d-intro">{intro}</p>}
-        {!current && <p className="ai-status">{en ? "Touch a numbered part, or start the guided tour." : "Touchez une pièce numérotée, ou lancez la visite guidée."}</p>}
-        <ol className="x3d-list">{defs.map((p, i) => <li key={i}><button className={active === i ? "on" : ""} onClick={() => select(i)}><i>{i + 1}</i>{p.name}</button></li>)}</ol>
-        <p className="ai-status">{en ? "Illustrative 3D model — proportions simplified." : "Modèle 3D illustratif — proportions simplifiées."}</p>
+      <div className="x3d-bottom"><p className="x3d-gesture"><Move size={14} />{en ? "Drag to orbit · Pinch to zoom" : "Glissez pour tourner · Pincez pour zoomer"}</p>
+        <div className="x3d-controls">
+          <button aria-pressed={exploded} onClick={() => { setExploded(v => !v); setActive(null); setTouring(false); sfx("whoosh"); }}>{exploded ? <Boxes size={16} /> : <Layers size={16} />}{exploded ? (en ? "Assemble" : "Assembler") : (en ? "Explode" : "Décomposer")}</button>
+          <button aria-pressed={touring} onClick={() => { if (touring) { setTouring(false); stopServerVoice(); } else { setExploded(true); setRotate(false); setFocusMode(true); setTouring(true); } }}>{touring ? <Square size={16} /> : <Play size={16} />}{touring ? (en ? "Stop tour" : "Arrêter la visite") : (en ? "Guided tour" : "Visite guidée")}</button>
+          <button aria-pressed={annotate} onClick={() => setAnnotate(v => !v)}><Tags size={16} />{en ? "Labels" : "Annotations"}</button>
+          <button aria-pressed={rotate} onClick={() => setRotate(v => !v)} aria-label={en ? "Auto rotation" : "Rotation automatique"}><Rotate3D size={17} /></button>
+        </div>
       </div>
     </div>
-  );
+    <div className="x3d-side">
+      <div className="x3d-section-title"><span className="eyebrow">{en ? "COMPONENTS" : "COMPOSANTS"}</span><span>{String(defs.length).padStart(2, "0")}</span></div>
+      {intro && <p className="x3d-intro">{intro}</p>}
+      <div className="x3d-inspect-controls"><button aria-pressed={focusMode} onClick={() => setFocusMode(v => !v)}><Focus size={15} />{en ? "Isolate selection" : "Isoler la sélection"}</button>{active !== null && <button onClick={() => { setActive(null); setTouring(false); }}>{en ? "Show all" : "Tout voir"}</button>}</div>
+      {exploded && <label className="x3d-spread">{en ? "Part separation" : "Écartement des pièces"}<input aria-label={en ? "Part separation" : "Écartement des pièces"} type="range" min="0.15" max="1.5" step="0.05" value={spread} onChange={e => setSpread(Number(e.target.value))} /></label>}
+      <ol className="x3d-list">{defs.map((p, i) => <li key={i}><button aria-pressed={active === i} className={active === i ? "on" : ""} onClick={() => select(i)}><i>{String(i + 1).padStart(2, "0")}</i><span>{p.name}</span></button></li>)}</ol>
+      {current ? <div className="x3d-callout" aria-live="polite"><span className="eyebrow">{en ? "SELECTED COMPONENT" : "PIÈCE SÉLECTIONNÉE"}</span><h4>{current.name}</h4><p>{current.explanation}</p></div> : <p className="ai-status">{en ? "Select a component to inspect its details and purpose." : "Sélectionnez un composant pour observer ses détails et comprendre son rôle."}</p>}
+      <p className="x3d-model-note">{en ? "Illustrative reconstruction, not a manufacturer’s technical model." : "Reconstitution illustrative, sans valeur de plan constructeur."}</p>
+    </div>
+  </div>;
 }

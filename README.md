@@ -90,7 +90,9 @@ Lara choisit l’outil selon la demande et peut en combiner plusieurs : vue solu
 
 Un fournisseur sans quota ou sans crédit est mis de côté 10 minutes. Aucun nom de modèle n’est affiché sur la borne. Variables serveur : `GEMINI_API_KEY`, `OPENAI_API_KEY`, `FAL_KEY`, `ELEVENLABS_API_KEY` (jamais exposées au navigateur).
 
-Vue 3D éclatée (`show_3d`) : conteneur, convoi exceptionnel, portique de quai, porte-conteneurs, wagon, ou assemblage décrit par Lara ; pièces numérotées, explication au toucher, visite guidée lue à voix haute.
+Vue 3D (`show_3d` et `/projets`) : douze équipements et convois, ou assemblage décrit par Lara. Les modèles s’ouvrent assemblés ; le visiteur peut les décomposer, régler l’écartement, isoler une pièce, choisir une vue de profil ou de dessus et lancer la visite guidée. Géométrie détaillée, matériaux distincts, relief de surface et ombres sont calculés localement, sans téléchargement de modèles ou de textures. Les reconstructions restent illustratives et ne constituent pas des plans constructeur.
+
+Les définitions et textes sont dans `src/lib/model3d.ts`, les détails des équipements dans `src/lib/model3d-detail.ts`, le rendu des matières dans `src/components/Model3DMeshes.tsx`. Les géométries sont fusionnées par matière et la scène ne calcule de nouvelles images que pendant les interactions et transitions.
 
 ## Son et interactions
 
@@ -118,5 +120,7 @@ npm run test:e2e
 ```
 
 Les tests navigateur vérifient les parcours, exports, liens/QR codes, responsive et libération caméra. Les scénarios IA sont mockés : un contrôle fournisseur réel séparé est nécessaire pour valider la voix en direct, la génération d’images et la lecture de cartes.
+
+Les tests 3D sont dans `tests/model3d.spec.ts`. Pour vérifier les douze modèles avec le navigateur complet : `npx playwright test tests/model3d.spec.ts --headed`. Le serveur local doit être démarré sur le port 3120 (ou indiqué avec `TEST_BASE_URL`).
 
 Déploiement : configurer les variables Production du projet Vercel, puis `vercel --prod`. `next.config.ts` inclut `knowledge/` dans le tracing serveur.

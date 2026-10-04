@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import dynamic from "next/dynamic";
 import { motion } from "framer-motion";
 import { Bot, Boxes, ExternalLink, Map as MapIcon, MapPin, CalendarDays } from "lucide-react";
@@ -12,6 +12,9 @@ const Exploded3D = dynamic(() => import("./Exploded3D").then(m => m.Exploded3D),
 const CinematicMap = dynamic(() => import("./CinematicMap").then(m => m.CinematicMap), { ssr: false, loading: () => <div className="live-skeleton" style={{ height: 460 }}>Envol vers la Côte d’Ivoire…</div> });
 
 const CATEGORIES = ["Tous", ...Array.from(new Set(PROJECTS.map(p => p.category)))];
+const subscribeProject = () => () => {};
+const readProject = () => { try { return sessionStorage.getItem("agl-project") ?? PROJECTS[0].id; } catch { return PROJECTS[0].id; } };
+const initialProject = () => PROJECTS[0].id;
 
 function Sources({ project }: { project: Project }) {
   const [open, setOpen] = useState<string | null>(null);
@@ -29,7 +32,9 @@ function Sources({ project }: { project: Project }) {
 export function ProjectsScreen() {
   const k = useKiosk(); const en = k.lang === "en";
   const [cat, setCat] = useState("Tous");
-  const [id, setId] = useState(() => { try { return sessionStorage.getItem("agl-project") ?? PROJECTS[0].id; } catch { return PROJECTS[0].id; } });
+  const savedId = useSyncExternalStore(subscribeProject, readProject, initialProject);
+  const [selectedId, setId] = useState<string | null>(null);
+  const id = selectedId ?? savedId;
   const [tab, setTab] = useState<"3d" | "map">("3d");
   const list = useMemo(() => PROJECTS.filter(p => cat === "Tous" || p.category === cat), [cat]);
   const project = PROJECTS.find(p => p.id === id) ?? PROJECTS[0];
@@ -37,7 +42,7 @@ export function ProjectsScreen() {
   // Lara peut ouvrir un projet précis.
   useEffect(() => { const h = (e: Event) => { const next = (e as CustomEvent<string>).detail; if (PROJECTS.some(p => p.id === next)) { setId(next); setCat("Tous"); } }; window.addEventListener("agl-project", h); return () => window.removeEventListener("agl-project", h); }, []);
   const { setContextDetails } = k;
-  useEffect(() => { try { sessionStorage.setItem("agl-project", project.id); } catch { /* stockage indisponible */ } setContextDetails({ project: project.title, category: project.category, date: project.date, facts: project.facts.map(f => `${f.value} ${f.label}`) }); logEvent("project_viewed", { id: project.id }); }, [project, setContextDetails]);
+  useEffect(() => { if (selectedId) { try { sessionStorage.setItem("agl-project", project.id); } catch { /* stockage indisponible */ } } setContextDetails({ project: project.title, category: project.category, date: project.date, facts: project.facts.map(f => `${f.value} ${f.label}`) }); logEvent("project_viewed", { id: project.id }); }, [project, selectedId, setContextDetails]);
   const pick = (p: Project) => { setId(p.id); sfx("select"); k.touch(); };
 
   return <div className="experience-page">

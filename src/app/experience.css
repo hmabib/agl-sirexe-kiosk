@@ -341,41 +341,53 @@
 /* Audio généré */
 .audio-view audio { width:100%; margin-top:12px; }
 .audio-wave { width:100%; height:150px; display:block; border-radius:16px; background:radial-gradient(120% 120% at 50% 50%,#1b365f99,#04122a); }
-/* Vue 3D éclatée */
-.x3d { display:grid; grid-template-columns:minmax(0,1fr) 280px; gap:16px; }
-@media (max-width:1300px) { .x3d { grid-template-columns:1fr; } }
-.x3d-stage { position:relative; height:min(62vh,560px); border-radius:18px; overflow:hidden; border:1px solid #ffffff14; }
-.x3d-controls { position:absolute; left:12px; top:12px; display:flex; gap:8px; }
-.x3d-controls button { display:inline-flex; align-items:center; gap:6px; min-height:44px; padding:0 14px; border-radius:99px; background:#04122acc; backdrop-filter:blur(8px); border:1px solid #eed58e44; color:#f4e6bd; font-size:13px; font-weight:700; }
-.x3d-controls button[aria-pressed="true"] { background:#EED58E; color:#04122a; }
-.x3d-pin { width:28px; height:28px; border-radius:50%; display:grid; place-items:center; font-size:12px; font-weight:800; color:#04122a; background:#f6e3a8; border:2px solid #04122a; box-shadow:0 4px 14px #0008; cursor:pointer; transition:transform .2s; }
-.x3d-pin.on { transform:scale(1.25); background:#fff; box-shadow:0 0 0 6px #eed58e55, 0 4px 14px #0008; }
-.x3d-side { display:flex; flex-direction:column; gap:12px; }
-.x3d-intro { font-size:15px; line-height:1.6; color:#dbe6f5; }
-.x3d-card { padding:16px; border-radius:16px; background:#eed58e12; border:1px solid #eed58e55; }
-.x3d-card h4 { font-size:18px; margin:6px 0; }
-.x3d-card p { font-size:14px; line-height:1.6; color:#dbe6f5; }
-.x3d-list { list-style:none; margin:0; padding:0; display:grid; gap:6px; }
-.x3d-list button { width:100%; display:flex; align-items:center; gap:10px; text-align:left; min-height:40px; padding:6px 10px; border-radius:12px; color:#cbd8ea; font-size:13px; background:#ffffff08; border:1px solid transparent; }
-.x3d-list button.on { border-color:#eed58e77; color:#fff; }
-.x3d-list i { width:22px; height:22px; flex:none; display:grid; place-items:center; border-radius:50%; font-style:normal; font-size:11px; font-weight:800; background:#eed58e26; color:#EED58E; }
+/* Detailed equipment explorer */
+.x3d { display:grid; grid-template-columns:minmax(0,1fr) 280px; gap:18px; align-items:start; }
+.x3d-stage { position:relative; height:min(64vh,600px); min-height:400px; border-radius:18px; overflow:hidden; border:1px solid #ffffff25; background:#c6cecc; isolation:isolate; }
+.x3d-stage canvas { touch-action:none; }
+.x3d-scene-tag { position:absolute; top:20px; left:20px; color:#344343; font-size:9px; letter-spacing:.15em; font-weight:800; pointer-events:none; }
+.x3d-scene-tag > span { display:inline-block; width:5px; height:5px; background:#59746c; border-radius:50%; margin-right:7px; vertical-align:middle; }
+.x3d-scene-tag small { display:block; margin:6px 0 0 12px; font-size:11px; letter-spacing:0; font-weight:500; color:#52615f; }
+.x3d-camera-controls { position:absolute; top:14px; right:14px; display:flex; gap:3px; padding:4px; background:#f4f7f2da; backdrop-filter:blur(12px); border:1px solid #ffffff88; border-radius:10px; }
+.x3d-camera-controls button { display:grid; place-items:center; min-width:40px; min-height:38px; padding:0 9px; color:#435351; border-radius:7px; font-size:11px; font-weight:700; }
+.x3d-camera-controls button[aria-pressed="true"] { background:#233834; color:#f1f3ea; }
+.x3d-bottom { position:absolute; bottom:14px; left:14px; right:14px; display:flex; flex-direction:column; align-items:center; gap:10px; pointer-events:none; }
+.x3d-gesture { display:flex; align-items:center; gap:7px; color:#374b48; font-size:10px; font-weight:600; text-shadow:0 1px 5px #ffffff80; }
+.x3d-controls { display:flex; justify-content:center; flex-wrap:wrap; gap:5px; padding:5px; background:#f4f7f2ed; border:1px solid #ffffff99; box-shadow:0 8px 24px #23383420; border-radius:13px; backdrop-filter:blur(12px); pointer-events:auto; }
+.x3d-controls button { display:inline-flex; align-items:center; justify-content:center; gap:7px; min-height:42px; padding:0 11px; border-radius:8px; color:#324440; font-size:12px; font-weight:700; }
+.x3d-controls button:first-child { background:#233834; color:#f4f2df; }
+.x3d-controls button[aria-pressed="true"] { background:#dfd3a9; color:#233834; }
+.x3d button:focus-visible, .x3d input:focus-visible { outline:3px solid #bf9650; outline-offset:3px; }
+.x3d-side { display:flex; flex-direction:column; gap:12px; min-width:0; }
+.x3d-section-title { display:flex; align-items:center; justify-content:space-between; padding:4px 0 12px; border-bottom:1px solid #ffffff20; }
+.x3d-section-title > span:last-child { color:#91a7b3; font:12px monospace; }
+.x3d-intro { font-size:13px; line-height:1.65; color:#c8d5df; }
+.x3d-inspect-controls { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:8px; }
+.x3d-inspect-controls button { display:inline-flex; align-items:center; gap:6px; font-size:11px; min-height:36px; color:#a6bac5; }
+.x3d-inspect-controls button[aria-pressed="true"] { color:#eed58e; }
+.x3d-spread { display:grid; gap:8px; font-size:12px; color:#c8d5df; }
+.x3d-spread input { width:100%; accent-color:#eed58e; min-height:28px; }
+.x3d-list { list-style:none; margin:0; padding:0; display:grid; gap:5px; }
+.x3d-list button { width:100%; display:flex; align-items:center; gap:10px; text-align:left; min-height:44px; padding:7px 10px; border-radius:9px; color:#cbd8df; font-size:12px; background:#ffffff05; border:1px solid #ffffff0c; transition:background .2s,border-color .2s; }
+.x3d-list button:hover { background:#ffffff10; }
+.x3d-list button.on { border-color:#eed58e88; color:#fff4d0; background:#eed58e12; }
+.x3d-list i { width:25px; flex:none; font:11px monospace; color:#9cafa9; }
+.x3d-list button.on i { color:#eed58e; }
+.x3d-callout { padding:14px; border-radius:12px; background:#eed58e0a; border:1px solid #eed58e35; animation:calloutin .25s ease; }
+.x3d-callout .eyebrow { font-size:9px; }
+.x3d-callout h4 { font-size:16px; margin:8px 0; }
+.x3d-callout p { font-size:12.5px; line-height:1.7; color:#cbd8df; }
+.x3d-model-note { margin-top:auto; font-size:10px; line-height:1.6; color:#8ea3af; }
+.x3d-pin { position:relative; display:inline-flex; align-items:center; gap:7px; height:28px; padding-right:10px; border-radius:99px; font-size:11px; color:#f4e6bd; background:#18322deb; border:1px solid #b8c4b5; box-shadow:0 4px 14px #0003; cursor:pointer; transition:opacity .3s; white-space:nowrap; }
+.x3d-pin b { width:25px; height:25px; display:grid; place-items:center; border-radius:50%; background:#e5dbba; color:#233834; }
+.x3d-pin::after { content:""; position:absolute; left:50%; top:100%; width:1px; height:18px; background:linear-gradient(#233834aa,transparent); }
+.x3d-pin.on { box-shadow:0 0 0 3px #eed58e55; }
+.x3d-pin.dim { opacity:.2; }
+.x3d-fallback { padding:90px 30px; text-align:center; color:#233834; }
+@keyframes calloutin { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:none; } }
+@media (max-width:1400px) { .x3d { grid-template-columns:1fr; } .x3d-list { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+@media (max-width:600px) { .x3d-stage { height:440px !important; } .x3d-scene-tag { top:18px; left:12px; max-width:140px; font-size:8px; line-height:1.7; } .x3d-scene-tag small { display:none; } .x3d-camera-controls { top:12px; right:10px; gap:0; } .x3d-camera-controls button { min-width:32px; padding:0 7px; } .x3d-controls { gap:2px; } .x3d-controls button { font-size:10px; padding:0 7px; gap:4px; } .x3d-gesture { font-size:9px; } .x3d-list { grid-template-columns:1fr; } }
 
-/* Vue 3D : annotations et fiche de pièce */
-.x3d-pin { display:inline-flex; align-items:center; gap:8px; height:28px; min-width:28px; padding:0; border-radius:99px; font-size:12px; font-weight:800; color:#04122a; background:#f6e3a8; border:2px solid #04122a; box-shadow:0 4px 14px #0008; cursor:pointer; transition:transform .25s, opacity .3s, box-shadow .25s; white-space:nowrap; }
-.x3d-pin b { width:24px; height:24px; display:grid; place-items:center; border-radius:50%; }
-.x3d-pin.label { padding-right:12px; background:#04122ae0; color:#f4e6bd; border-color:#eed58e88; backdrop-filter:blur(6px); }
-.x3d-pin.label b { background:#EED58E; color:#04122a; }
-.x3d-pin.label::after { content:""; position:absolute; left:50%; top:100%; width:1px; height:22px; background:linear-gradient(#eed58eaa,transparent); }
-.x3d-pin span { font-size:11.5px; font-weight:700; letter-spacing:.02em; }
-.x3d-pin.on { transform:scale(1.18); box-shadow:0 0 0 6px #eed58e44, 0 6px 18px #000a; }
-.x3d-pin.dim { opacity:.25; }
-.x3d-callout { position:absolute; left:16px; right:16px; bottom:16px; max-width:560px; padding:16px 18px; border-radius:18px; background:linear-gradient(160deg,#13305ad9,#081a36ee); backdrop-filter:blur(14px); border:1px solid #eed58e66; box-shadow:0 18px 50px #000a; animation:calloutin .35s cubic-bezier(.22,1,.36,1); }
-.x3d-callout h4 { font-size:20px; margin:4px 0 6px; }
-.x3d-callout p { font-size:14.5px; line-height:1.6; color:#dbe6f5; }
-@keyframes calloutin { from { opacity:0; transform:translateY(12px); } to { opacity:1; transform:none; } }
-.x3d-controls { flex-wrap:wrap; right:12px; }
-
-.x3d-pin { position:relative; }
 /* Page Projets */
 .proj-filters { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:18px; }
 .proj-filters button { min-height:44px; padding:0 16px; border-radius:99px; border:1px solid #ffffff1f; background:#ffffff08; color:#cbd8ea; font-size:13px; font-weight:700; }
